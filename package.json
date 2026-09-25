@@ -1,0 +1,29 @@
+{
+  "name": "shift-swap-api",
+  "module": "src/index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun run --hot src/index.ts",
+    "start": "bun run src/index.ts",
+    "auth:generate": "bunx @better-auth/cli generate",
+    "migrate:auth": "bun run scripts/migrate-auth.ts",
+    "db:migrate": "bun run scripts/migrate-domain.ts",
+    "migrate": "bun run migrate:auth && bun run db:migrate",
+    "seed": "bun run scripts/seed.ts"
+  },
+  "devDependencies": {
+    "@better-auth/cli": "^1.4.21",
+    "@types/bun": "latest",
+    "@types/pg": "^8.23.1"
+  },
+  "peerDependencies": {
+    "typescript": "^7"
+  },
+  "dependencies": {
+    "better-auth": "^1.7.6",
+    "hono": "^4.13.9",
+    "pg": "^8.23.0",
+    "shift-swap": "^0.1.2"
+  }
+}
