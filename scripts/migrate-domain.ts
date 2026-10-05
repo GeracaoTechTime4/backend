@@ -5,4 +5,4 @@ const schema = await Bun.file(new URL("../src/db/schema.sql", import.meta.url)).
 await pool.query(schema);
 await pool.end();
 
-console.log("Domain schema (funcionario, supervisor) applied.");
+console.log("Domain schema (funcionario, supervisor, turno, solicitacao_troca_turno) applied.");
