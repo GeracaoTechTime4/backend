@@ -1,0 +1,116 @@
+# Autenticação (Better Auth) — extensão REST Client (humao.rest-client)
+# O cookie de sessão é guardado pelo REST Client e reaproveitado nas próximas requisições
+# (um login novo substitui o anterior).
+#
+# Usuários do `bun run seed` (senha para todos: password123):
+#   supervisor@example.com (SUPERVISOR) · joao@example.com e maria@example.com (EMPLOYEE)
+
+@baseUrl = http://localhost:3000
+@origin = http://localhost:5173
+@senha = password123
+
+### Health-check — 200 { status: "ok", timestamp }
+GET {{baseUrl}}/health
+
+### Cadastro: supervisor — 200; se já existir (ex.: criado pelo seed) a API recusa
+POST {{baseUrl}}/api/auth/sign-up/email
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "name": "Ana Supervisora",
+  "email": "supervisor@example.com",
+  "password": "{{senha}}",
+  "role": "SUPERVISOR"
+}
+
+### Cadastro: funcionário João — 200; se já existir a API recusa
+POST {{baseUrl}}/api/auth/sign-up/email
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "name": "João Funcionário",
+  "email": "joao@example.com",
+  "password": "{{senha}}",
+  "role": "EMPLOYEE"
+}
+
+### Cadastro: funcionária Maria — 200; se já existir a API recusa
+POST {{baseUrl}}/api/auth/sign-up/email
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "name": "Maria Funcionária",
+  "email": "maria@example.com",
+  "password": "{{senha}}",
+  "role": "EMPLOYEE"
+}
+
+### Cadastro sem role — erro de validação (role é obrigatório)
+POST {{baseUrl}}/api/auth/sign-up/email
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "name": "Sem Papel",
+  "email": "sem-papel@example.com",
+  "password": "{{senha}}"
+}
+
+### Login: supervisor — 200, define o cookie de sessão
+POST {{baseUrl}}/api/auth/sign-in/email
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "email": "supervisor@example.com",
+  "password": "{{senha}}"
+}
+
+### Login: João — 200
+POST {{baseUrl}}/api/auth/sign-in/email
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "email": "joao@example.com",
+  "password": "{{senha}}"
+}
+
+### Login: Maria — 200
+POST {{baseUrl}}/api/auth/sign-in/email
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "email": "maria@example.com",
+  "password": "{{senha}}"
+}
+
+### Login com senha errada — 401
+# @no-cookie-jar
+POST {{baseUrl}}/api/auth/sign-in/email
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "email": "joao@example.com",
+  "password": "senha-errada"
+}
+
+### Sessão atual — 200 com { session, user } (user.role mostra o papel)
+GET {{baseUrl}}/api/auth/get-session
+Origin: {{origin}}
+
+### Sessão sem cookie — 200 com corpo null
+# @no-cookie-jar
+GET {{baseUrl}}/api/auth/get-session
+
+### Logout — 200 e o cookie deixa de valer
+POST {{baseUrl}}/api/auth/sign-out
+Content-Type: application/json
+Origin: {{origin}}
+
+{}

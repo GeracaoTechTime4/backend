@@ -84,6 +84,19 @@ Funcionários (`EMPLOYEE`) só *solicitam* e cancelam; quem decide é o `SUPERVI
 
 **Expiração:** ao subir, a API roda a cada 60 s o `ExpirarSolicitacoesTrocaTurnoUseCase`, que expira as pendentes cujo turno já começou. Os turnos são guardados sem fuso, então defina `TZ` no ambiente (ex.: `TZ=America/Sao_Paulo`); no Docker o padrão é UTC.
 
+## Testando os endpoints (REST Client)
+
+A pasta [http](http) tem arquivos `*.http` para a extensão [REST Client](https://marketplace.visualstudio.com/items?itemName=humao.rest-client) do VS Code (clique em *Send Request* acima de cada bloco). Rode `bun run seed` antes: os arquivos usam os usuários do seed (senha `password123`).
+
+| Arquivo | Cobre |
+| --- | --- |
+| [auth.http](http/auth.http) | health, cadastro, login, sessão e logout |
+| [turnos.http](http/turnos.http) | `GET/POST /turnos`, `GET /turnos/me` |
+| [funcionarios.http](http/funcionarios.http) | `GET /funcionarios` |
+| [solicitacoes-troca.http](http/solicitacoes-troca.http) | todas as rotas de `/solicitacoes-troca`, do pedido à aprovação, rejeição e cancelamento |
+
+Cada bloco indica o status esperado no título (ex.: `— 403`). Rode de cima para baixo: os logins trocam o cookie de sessão e os ids ficam guardados em variáveis nomeadas. O fluxo de solicitações cria turnos novos em datas aleatórias de 2099, então pode ser repetido.
+
 ## Domínio (biblioteca [`shift-swap`](https://github.com/macndesign/shift-swap))
 
 As regras de negócio de troca de turnos vêm da lib `shift-swap` (entidades, use-cases e ports, sem I/O próprio). A API implementa os repositórios (`Pg*Repository` em [src/lib/shift-swap](src/lib/shift-swap)) e monta os use-cases já prontos para uso em [src/lib/shift-swap/index.ts](src/lib/shift-swap/index.ts).
