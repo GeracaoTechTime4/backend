@@ -1,7 +1,7 @@
 import { createMiddleware } from "hono/factory";
 import { auth } from "./auth";
 
-type Env = {
+export type Env = {
   Variables: {
     session: typeof auth.$Infer.Session;
   };
@@ -18,7 +18,17 @@ export const requireAuth = createMiddleware<Env>(async (c, next) => {
   await next();
 });
 
-export const requireSupervisor = createMiddleware<Env>(async (c, next) => {
+export const requireEmployee = createMiddleware<Env>(async (c, next) => {
+  const session = c.get("session");
+
+  if (session.user.role !== "EMPLOYEE") {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+
+  await next();
+});
+
+export const requireSupervisor =createMiddleware<Env>(async (c, next) => {
   const session = c.get("session");
 
   if (session.user.role !== "SUPERVISOR") {

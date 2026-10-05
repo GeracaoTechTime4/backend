@@ -1,4 +1,4 @@
-import type { FuncionarioEntity, Turno } from "shift-swap";
+import type { FuncionarioEntity, SolicitacaoTrocaTurno, Turno } from "shift-swap";
 
 export function toTurnoDTO(turno: Turno) {
   return {
@@ -7,6 +7,19 @@ export function toTurnoDTO(turno: Turno) {
     horaInicio: turno.horaInicio,
     horaFim: turno.horaFim,
     funcionarioId: turno.funcionarioId,
+  };
+}
+
+export function toSolicitacaoTrocaTurnoDTO(solicitacao: SolicitacaoTrocaTurno) {
+  return {
+    id: solicitacao.id,
+    status: solicitacao.status,
+    solicitanteId: solicitacao.solicitanteId,
+    destinatarioId: solicitacao.destinatarioId ?? null,
+    turno: toTurnoDTO(solicitacao.turno),
+    decididoPorId: solicitacao.decididoPorId ?? null,
+    decididoEm: solicitacao.decididoEm?.toISOString() ?? null,
+    motivo: solicitacao.motivo ?? null,
   };
 }
 

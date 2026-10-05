@@ -70,6 +70,20 @@ docker compose exec api bun run seed
 - `GET /turnos/me?data=YYYY-MM-DD` — rota privada, exige sessão autenticada (qualquer `role`). Lista os turnos do próprio usuário logado (`funcionarioId` vem da sessão, nunca da query) na data informada, via `ListarTurnosPorFuncionarioEDataUseCase`. Retorna 400 se `data` não for informado.
 - `GET /funcionarios` — rota privada, só `SUPERVISOR` (401/403 iguais às rotas de turno). Lista todos os funcionários via `ListarFuncionariosUseCase`.
 
+### Solicitações de troca de turno
+
+Funcionários (`EMPLOYEE`) só *solicitam* e cancelam; quem decide é o `SUPERVISOR`. O usuário vem sempre da sessão, nunca do corpo. Ciclo de vida: `pendente` → `aprovada` | `rejeitada` | `cancelada` | `expirada` (todos terminais). Erros: 400 validação, 401 sem sessão, 403 papel errado, 404 não encontrado, 409 solicitação que já não está pendente.
+
+- `POST /solicitacoes-troca` — `EMPLOYEE`. Corpo: `{ turnoId }`. Só o dono do turno pode pedir; só uma pendente por turno. Retorna 201.
+- `GET /solicitacoes-troca/disponiveis` — `EMPLOYEE`. Pendentes de outros funcionários.
+- `GET /solicitacoes-troca?status=` — `SUPERVISOR`. Todas, com filtro opcional por status.
+- `GET /solicitacoes-troca/:id` — `SUPERVISOR` vê qualquer uma; `EMPLOYEE` só as suas (403 nas demais).
+- `POST /solicitacoes-troca/:id/aprovar` — `SUPERVISOR`. Corpo: `{ destinatarioId }`. Reatribui o turno; falha com 409 se o destinatário já tiver turno no horário.
+- `POST /solicitacoes-troca/:id/rejeitar` — `SUPERVISOR`. Corpo: `{ motivo }` (obrigatório).
+- `POST /solicitacoes-troca/:id/cancelar` — `EMPLOYEE`, só o próprio solicitante (403 caso contrário).
+
+**Expiração:** ao subir, a API roda a cada 60 s o `ExpirarSolicitacoesTrocaTurnoUseCase`, que expira as pendentes cujo turno já começou. Os turnos são guardados sem fuso, então defina `TZ` no ambiente (ex.: `TZ=America/Sao_Paulo`); no Docker o padrão é UTC.
+
 ## Domínio (biblioteca [`shift-swap`](https://github.com/macndesign/shift-swap))
 
 As regras de negócio de troca de turnos vêm da lib `shift-swap` (entidades, use-cases e ports, sem I/O próprio). A API implementa os repositórios (`Pg*Repository` em [src/lib/shift-swap](src/lib/shift-swap)) e monta os use-cases já prontos para uso em [src/lib/shift-swap/index.ts](src/lib/shift-swap/index.ts).

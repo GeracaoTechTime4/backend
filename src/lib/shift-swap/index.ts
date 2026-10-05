@@ -1,5 +1,6 @@
 import {
   AprovarTrocaTurnoUseCase,
+  BuscarSolicitacaoTrocaTurnoPorIdUseCase,
   CancelarTrocaTurnoUseCase,
   CriarFuncionarioUseCase,
   CriarSupervisorUseCase,
@@ -43,3 +44,4 @@ export const cancelarTrocaTurno = new CancelarTrocaTurnoUseCase(solicitacaoRepos
 export const expirarSolicitacoesTrocaTurno = new ExpirarSolicitacoesTrocaTurnoUseCase(solicitacaoRepository);
 export const listarSolicitacoesTrocaTurno = new ListarSolicitacoesTrocaTurnoUseCase(solicitacaoRepository);
 export const listarTurnosDisponiveisParaTroca = new ListarTurnosDisponiveisParaTrocaUseCase(solicitacaoRepository);
+export const buscarSolicitacaoTrocaTurnoPorId = new BuscarSolicitacaoTrocaTurnoPorIdUseCase(solicitacaoRepository);

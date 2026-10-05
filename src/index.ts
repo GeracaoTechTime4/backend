@@ -1,9 +1,11 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { auth } from "./lib/auth";
+import { iniciarExpiracaoDeSolicitacoes } from "./lib/expirar-solicitacoes";
 import { requireAuth, requireSupervisor } from "./lib/session-middleware";
 import { criarTurno, listarFuncionarios, listarTurnos, listarTurnosPorFuncionarioEData } from "./lib/shift-swap";
 import { toFuncionarioDTO, toTurnoDTO } from "./lib/shift-swap/dto";
+import { solicitacoesTrocaTurno } from "./routes/solicitacoes-troca-turno";
 
 const port = Number(process.env.PORT ?? 3000);
 
@@ -91,6 +93,10 @@ app.get("/turnos/me", requireAuth, async (c) => {
 
   return c.json({ turnos: result.getValue().map(toTurnoDTO) });
 });
+
+app.route("/solicitacoes-troca", solicitacoesTrocaTurno);
+
+iniciarExpiracaoDeSolicitacoes();
 
 console.log(`shift-swap-api listening on port ${port}`);
 
