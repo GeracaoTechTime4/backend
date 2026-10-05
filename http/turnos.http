@@ -1,0 +1,123 @@
+# Turnos — GET /turnos, POST /turnos, GET /turnos/me
+# Rode de cima para baixo: os logins trocam o cookie de sessão a cada passo.
+# Pré-requisito: `bun run seed` (usuários joao/supervisor com senha password123).
+
+@baseUrl = http://localhost:3000
+@origin = http://localhost:5173
+@senha = password123
+
+### 1. Login do João (só para capturar o id dele)
+# @name loginJoao
+POST {{baseUrl}}/api/auth/sign-in/email
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "email": "joao@example.com",
+  "password": "{{senha}}"
+}
+
+###
+@joaoId = {{loginJoao.response.body.$.user.id}}
+
+### 2. Login do supervisor
+POST {{baseUrl}}/api/auth/sign-in/email
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "email": "supervisor@example.com",
+  "password": "{{senha}}"
+}
+
+### 3. Listar todos os turnos (SUPERVISOR) — 200 { turnos: [...] }
+GET {{baseUrl}}/turnos
+
+### 4. Criar turno (SUPERVISOR) — 201 { turno }
+POST {{baseUrl}}/turnos
+Content-Type: application/json
+
+{
+  "data": "2099-12-01",
+  "horaInicio": "08:00",
+  "horaFim": "12:00",
+  "funcionarioId": "{{joaoId}}"
+}
+
+### 5. Criar turno sem campos obrigatórios — 400
+POST {{baseUrl}}/turnos
+Content-Type: application/json
+
+{
+  "data": "2099-12-01"
+}
+
+### 6. Criar turno com hora de fim antes do início — 400 (regra de negócio)
+POST {{baseUrl}}/turnos
+Content-Type: application/json
+
+{
+  "data": "2099-12-01",
+  "horaInicio": "12:00",
+  "horaFim": "08:00",
+  "funcionarioId": "{{joaoId}}"
+}
+
+### 7. Criar turno com data inválida — 400
+POST {{baseUrl}}/turnos
+Content-Type: application/json
+
+{
+  "data": "01/12/2099",
+  "horaInicio": "08:00",
+  "horaFim": "12:00",
+  "funcionarioId": "{{joaoId}}"
+}
+
+### 8. Criar turno com JSON inválido — 400
+POST {{baseUrl}}/turnos
+Content-Type: application/json
+
+{ isto não é json }
+
+### 9. Login do João para ver os próprios turnos
+POST {{baseUrl}}/api/auth/sign-in/email
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "email": "joao@example.com",
+  "password": "{{senha}}"
+}
+
+### 10. Meus turnos de uma data (qualquer papel logado) — 200 { turnos: [...] }
+# O seed cria turnos de hoje e de amanhã (data em UTC). O id vem sempre da sessão.
+GET {{baseUrl}}/turnos/me?data={{$datetime "YYYY-MM-DD"}}
+
+### 11. Meus turnos de 2099-12-01 (o do passo 4) — 200
+GET {{baseUrl}}/turnos/me?data=2099-12-01
+
+### 12. Meus turnos sem informar a data — 400
+GET {{baseUrl}}/turnos/me
+
+### 13. Funcionário tentando listar todos os turnos — 403
+GET {{baseUrl}}/turnos
+
+### 14. Funcionário tentando criar turno — 403
+POST {{baseUrl}}/turnos
+Content-Type: application/json
+
+{
+  "data": "2099-12-01",
+  "horaInicio": "08:00",
+  "horaFim": "12:00",
+  "funcionarioId": "{{joaoId}}"
+}
+
+### 15. Listar turnos sem sessão — 401
+# @no-cookie-jar
+GET {{baseUrl}}/turnos
+
+### 16. Meus turnos sem sessão — 401
+# @no-cookie-jar
+GET {{baseUrl}}/turnos/me?data=2099-12-01

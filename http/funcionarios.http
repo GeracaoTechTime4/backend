@@ -1,0 +1,36 @@
+# Funcionários — GET /funcionarios (só SUPERVISOR)
+# Pré-requisito: `bun run seed`.
+
+@baseUrl = http://localhost:3000
+@origin = http://localhost:5173
+@senha = password123
+
+### 1. Login do supervisor
+POST {{baseUrl}}/api/auth/sign-in/email
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "email": "supervisor@example.com",
+  "password": "{{senha}}"
+}
+
+### 2. Listar funcionários — 200 { funcionarios: [{ id, name, email }] }
+GET {{baseUrl}}/funcionarios
+
+### 3. Login do João (funcionário)
+POST {{baseUrl}}/api/auth/sign-in/email
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "email": "joao@example.com",
+  "password": "{{senha}}"
+}
+
+### 4. Funcionário tentando listar funcionários — 403
+GET {{baseUrl}}/funcionarios
+
+### 5. Sem sessão — 401
+# @no-cookie-jar
+GET {{baseUrl}}/funcionarios
