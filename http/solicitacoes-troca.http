@@ -1,20 +1,27 @@
 # Solicitações de troca de turno — todas as rotas de /solicitacoes-troca
 #
+# Fluxo: o funcionário A pede a troca de um turno a um colega B (destinatário). B aceita ou
+# recusa; só depois do aceite o supervisor autoriza (aprova) ou não (rejeita).
+#
+#   pendente ──B aceita──► aguardando_aprovacao ──supervisor──► aprovada | rejeitada
+#      │                          │
+#      ├──B recusa──► recusada    └── A cancela / expira
+#      └── A cancela / expira
+#
 # Rode de cima para baixo (a cada "Send Request"). Os logins trocam o cookie de sessão e
 # os ids ficam guardados nas variáveis nomeadas (@name).
 #
 # Pré-requisito: `bun run seed` (supervisor, João e Maria, senha password123).
+# João é quem pede (A) e Maria é a destinatária (B).
 #
 # O fluxo cria turnos novos do João em datas aleatórias de 2099, então pode ser repetido
 # sem depender do seed e sem expirar (a expiração automática só pega turnos já iniciados).
-#
-# Ciclo de vida:  pendente → aprovada | rejeitada | cancelada | expirada
 
 @baseUrl = http://localhost:3000
 @origin = http://localhost:5173
 @senha = password123
 
-### ═══ PREPARAÇÃO — ids dos funcionários e turnos do João ═══
+### ═══ PREPARAÇÃO — ids e turnos do João ═══
 
 ### P1. Login do João (captura o id)
 # @name loginJoao
@@ -48,43 +55,79 @@ Origin: {{origin}}
   "password": "{{senha}}"
 }
 
-### P4. Turno do João para ser APROVADO — 201
+### P4. Turno do João que será APROVADO — 201
 # @name turnoAprovar
 POST {{baseUrl}}/turnos
 Content-Type: application/json
 
 {
   "data": "2099-{{$randomInt 10 12}}-{{$randomInt 10 28}}",
-  "horaInicio": "08:00",
-  "horaFim": "12:00",
+  "horaInicio": "06:00",
+  "horaFim": "09:00",
   "funcionarioId": "{{loginJoao.response.body.$.user.id}}"
 }
 
-### P5. Turno do João para ser REJEITADO — 201
+### P5. Turno do João que será REJEITADO pelo supervisor — 201
 # @name turnoRejeitar
 POST {{baseUrl}}/turnos
 Content-Type: application/json
 
 {
   "data": "2099-{{$randomInt 10 12}}-{{$randomInt 10 28}}",
-  "horaInicio": "13:00",
-  "horaFim": "17:00",
+  "horaInicio": "09:00",
+  "horaFim": "12:00",
   "funcionarioId": "{{loginJoao.response.body.$.user.id}}"
 }
 
-### P6. Turno do João para ser CANCELADO — 201
+### P6. Turno do João que será RECUSADO pela Maria — 201
+# @name turnoRecusar
+POST {{baseUrl}}/turnos
+Content-Type: application/json
+
+{
+  "data": "2099-{{$randomInt 10 12}}-{{$randomInt 10 28}}",
+  "horaInicio": "12:00",
+  "horaFim": "15:00",
+  "funcionarioId": "{{loginJoao.response.body.$.user.id}}"
+}
+
+### P7. Turno do João que será CANCELADO por ele — 201
 # @name turnoCancelar
 POST {{baseUrl}}/turnos
 Content-Type: application/json
 
 {
   "data": "2099-{{$randomInt 10 12}}-{{$randomInt 10 28}}",
-  "horaInicio": "18:00",
-  "horaFim": "22:00",
+  "horaInicio": "15:00",
+  "horaFim": "18:00",
   "funcionarioId": "{{loginJoao.response.body.$.user.id}}"
 }
 
-### ═══ FUNCIONÁRIO (João) — solicitar ═══
+### P8. Turno do João que NÃO terá solicitação (usado nos testes de erro) — 201
+# @name turnoLivre
+POST {{baseUrl}}/turnos
+Content-Type: application/json
+
+{
+  "data": "2099-{{$randomInt 10 12}}-{{$randomInt 10 28}}",
+  "horaInicio": "18:00",
+  "horaFim": "21:00",
+  "funcionarioId": "{{loginJoao.response.body.$.user.id}}"
+}
+
+### P9. Turno do João que ficará "pendente" (supervisor tenta decidir antes do aceite) — 201
+# @name turnoPendente
+POST {{baseUrl}}/turnos
+Content-Type: application/json
+
+{
+  "data": "2099-{{$randomInt 10 12}}-{{$randomInt 10 28}}",
+  "horaInicio": "21:00",
+  "horaFim": "23:00",
+  "funcionarioId": "{{loginJoao.response.body.$.user.id}}"
+}
+
+### ═══ FUNCIONÁRIO A (João) — solicitar a troca a um colega ═══
 
 ### 1. Login do João
 POST {{baseUrl}}/api/auth/sign-in/email
@@ -96,100 +139,160 @@ Origin: {{origin}}
   "password": "{{senha}}"
 }
 
-### 2. Solicitar troca do turno A (será aprovado) — 201, status "pendente"
+### 2. Pedir a troca do turno "aprovar" à Maria — 201, status "pendente"
 # @name solicitacaoAprovar
 POST {{baseUrl}}/solicitacoes-troca
 Content-Type: application/json
 
 {
-  "turnoId": "{{turnoAprovar.response.body.$.turno.id}}"
+  "turnoId": "{{turnoAprovar.response.body.$.turno.id}}",
+  "destinatarioId": "{{loginMaria.response.body.$.user.id}}"
 }
 
-### 3. Solicitar troca do turno B (será rejeitado) — 201
+### 3. Pedir a troca do turno "rejeitar" à Maria — 201
 # @name solicitacaoRejeitar
 POST {{baseUrl}}/solicitacoes-troca
 Content-Type: application/json
 
 {
-  "turnoId": "{{turnoRejeitar.response.body.$.turno.id}}"
+  "turnoId": "{{turnoRejeitar.response.body.$.turno.id}}",
+  "destinatarioId": "{{loginMaria.response.body.$.user.id}}"
 }
 
-### 4. Solicitar troca do turno C (será cancelado) — 201
+### 4. Pedir a troca do turno "recusar" à Maria — 201
+# @name solicitacaoRecusar
+POST {{baseUrl}}/solicitacoes-troca
+Content-Type: application/json
+
+{
+  "turnoId": "{{turnoRecusar.response.body.$.turno.id}}",
+  "destinatarioId": "{{loginMaria.response.body.$.user.id}}"
+}
+
+### 5. Pedir a troca do turno "cancelar" à Maria — 201
 # @name solicitacaoCancelar
 POST {{baseUrl}}/solicitacoes-troca
 Content-Type: application/json
 
 {
-  "turnoId": "{{turnoCancelar.response.body.$.turno.id}}"
+  "turnoId": "{{turnoCancelar.response.body.$.turno.id}}",
+  "destinatarioId": "{{loginMaria.response.body.$.user.id}}"
 }
 
-### 5. Solicitar de novo o mesmo turno A — 400 (já existe uma pendente)
+### 6. Pedir a troca do turno "pendente" à Maria — 201
+# @name solicitacaoPendente
 POST {{baseUrl}}/solicitacoes-troca
 Content-Type: application/json
 
 {
-  "turnoId": "{{turnoAprovar.response.body.$.turno.id}}"
+  "turnoId": "{{turnoPendente.response.body.$.turno.id}}",
+  "destinatarioId": "{{loginMaria.response.body.$.user.id}}"
 }
 
-### 6. Solicitar sem turnoId — 400
-POST {{baseUrl}}/solicitacoes-troca
-Content-Type: application/json
-
-{}
-
-### 7. Solicitar turno inexistente — 404
+### 7. Pedir de novo o mesmo turno — 409 (já existe uma solicitação em aberto)
 POST {{baseUrl}}/solicitacoes-troca
 Content-Type: application/json
 
 {
-  "turnoId": "turno-que-nao-existe"
+  "turnoId": "{{turnoAprovar.response.body.$.turno.id}}",
+  "destinatarioId": "{{loginMaria.response.body.$.user.id}}"
 }
 
-### 8. Solicitar JSON inválido — 400
+### 8. Pedir sem destinatarioId — 400
 POST {{baseUrl}}/solicitacoes-troca
 Content-Type: application/json
 
-{ isto não é json }
+{
+  "turnoId": "{{turnoLivre.response.body.$.turno.id}}"
+}
 
-### 9. Ver a própria solicitação — 200
-GET {{baseUrl}}/solicitacoes-troca/{{solicitacaoAprovar.response.body.$.solicitacao.id}}
-
-### 10. Ver solicitação inexistente — 404
-GET {{baseUrl}}/solicitacoes-troca/id-que-nao-existe
-
-### 11. Funcionário tentando listar todas — 403 (só supervisor)
-GET {{baseUrl}}/solicitacoes-troca
-
-### ═══ FUNCIONÁRIO (João) — cancelar a própria solicitação ═══
-
-### 12. Cancelar a solicitação C — 200, status "cancelada"
-POST {{baseUrl}}/solicitacoes-troca/{{solicitacaoCancelar.response.body.$.solicitacao.id}}/cancelar
-
-### 13. Cancelar de novo — 409 (já não está pendente)
-POST {{baseUrl}}/solicitacoes-troca/{{solicitacaoCancelar.response.body.$.solicitacao.id}}/cancelar
-
-### 14. Cancelar solicitação inexistente — 404
-POST {{baseUrl}}/solicitacoes-troca/id-que-nao-existe/cancelar
-
-### 15. Funcionário tentando aprovar — 403 (só supervisor)
-POST {{baseUrl}}/solicitacoes-troca/{{solicitacaoAprovar.response.body.$.solicitacao.id}}/aprovar
+### 9. Pedir sem turnoId — 400
+POST {{baseUrl}}/solicitacoes-troca
 Content-Type: application/json
 
 {
   "destinatarioId": "{{loginMaria.response.body.$.user.id}}"
 }
 
-### 16. Funcionário tentando rejeitar — 403 (só supervisor)
-POST {{baseUrl}}/solicitacoes-troca/{{solicitacaoRejeitar.response.body.$.solicitacao.id}}/rejeitar
+### 10. Pedir com destinatário inexistente — 404
+POST {{baseUrl}}/solicitacoes-troca
+Content-Type: application/json
+
+{
+  "turnoId": "{{turnoLivre.response.body.$.turno.id}}",
+  "destinatarioId": "funcionario-que-nao-existe"
+}
+
+### 11. Pedir a troca para si mesmo — 400
+POST {{baseUrl}}/solicitacoes-troca
+Content-Type: application/json
+
+{
+  "turnoId": "{{turnoLivre.response.body.$.turno.id}}",
+  "destinatarioId": "{{loginJoao.response.body.$.user.id}}"
+}
+
+### 12. Pedir turno inexistente — 404
+POST {{baseUrl}}/solicitacoes-troca
+Content-Type: application/json
+
+{
+  "turnoId": "turno-que-nao-existe",
+  "destinatarioId": "{{loginMaria.response.body.$.user.id}}"
+}
+
+### 13. Pedir com JSON inválido — 400
+POST {{baseUrl}}/solicitacoes-troca
+Content-Type: application/json
+
+{ isto não é json }
+
+### 14. Ver a própria solicitação — 200
+GET {{baseUrl}}/solicitacoes-troca/{{solicitacaoAprovar.response.body.$.solicitacao.id}}
+
+### 15. Ver solicitação inexistente — 404
+GET {{baseUrl}}/solicitacoes-troca/id-que-nao-existe
+
+### 16. Pedidos recebidos pelo João — 200 (nenhum: os pedidos são dele, não para ele)
+GET {{baseUrl}}/solicitacoes-troca/recebidas
+
+### 17. João tentando listar todas — 403 (só supervisor)
+GET {{baseUrl}}/solicitacoes-troca
+
+### 18. Quem pediu não pode aceitar a própria solicitação — 403 (só o destinatário)
+POST {{baseUrl}}/solicitacoes-troca/{{solicitacaoAprovar.response.body.$.solicitacao.id}}/aceitar
+
+### 19. Quem pediu não pode recusar a própria solicitação — 403 (só o destinatário)
+POST {{baseUrl}}/solicitacoes-troca/{{solicitacaoAprovar.response.body.$.solicitacao.id}}/recusar
+Content-Type: application/json
+
+{}
+
+### 20. João tentando aprovar — 403 (só supervisor)
+POST {{baseUrl}}/solicitacoes-troca/{{solicitacaoAprovar.response.body.$.solicitacao.id}}/aprovar
+
+### 21. João tentando rejeitar — 403 (só supervisor)
+POST {{baseUrl}}/solicitacoes-troca/{{solicitacaoAprovar.response.body.$.solicitacao.id}}/rejeitar
 Content-Type: application/json
 
 {
   "motivo": "Tentativa indevida"
 }
 
-### ═══ FUNCIONÁRIA (Maria) — o que ela enxerga ═══
+### ═══ FUNCIONÁRIO A (João) — cancelar a própria solicitação ═══
 
-### 17. Login da Maria
+### 22. Cancelar o pedido "cancelar" enquanto pendente — 200, status "cancelada"
+POST {{baseUrl}}/solicitacoes-troca/{{solicitacaoCancelar.response.body.$.solicitacao.id}}/cancelar
+
+### 23. Cancelar de novo — 409 (já encerrada)
+POST {{baseUrl}}/solicitacoes-troca/{{solicitacaoCancelar.response.body.$.solicitacao.id}}/cancelar
+
+### 24. Cancelar solicitação inexistente — 404
+POST {{baseUrl}}/solicitacoes-troca/id-que-nao-existe/cancelar
+
+### ═══ DESTINATÁRIO B (Maria) — aceitar ou recusar ═══
+
+### 25. Login da Maria
 POST {{baseUrl}}/api/auth/sign-in/email
 Content-Type: application/json
 Origin: {{origin}}
@@ -199,26 +302,74 @@ Origin: {{origin}}
   "password": "{{senha}}"
 }
 
-### 18. Turnos disponíveis para troca — 200, só pendentes de OUTROS (A e B do João)
-GET {{baseUrl}}/solicitacoes-troca/disponiveis
+### 26. Pedidos recebidos — 200 (os pendentes endereçados a ela; os cancelados não aparecem)
+GET {{baseUrl}}/solicitacoes-troca/recebidas
 
-### 19. Ver solicitação de outro funcionário — 403
+### 27. Maria vê o pedido que recebeu — 200 (destinatária também enxerga)
 GET {{baseUrl}}/solicitacoes-troca/{{solicitacaoAprovar.response.body.$.solicitacao.id}}
 
-### 20. Cancelar solicitação de outro funcionário — 403 (só o solicitante)
+### 28. Maria tentando cancelar o pedido do João — 403 (só o solicitante)
 POST {{baseUrl}}/solicitacoes-troca/{{solicitacaoAprovar.response.body.$.solicitacao.id}}/cancelar
 
-### 21. Maria tentando solicitar um turno que não é dela — 400
+### 29. Maria tentando aprovar — 403 (só supervisor)
+POST {{baseUrl}}/solicitacoes-troca/{{solicitacaoAprovar.response.body.$.solicitacao.id}}/aprovar
+
+### 30. Maria pedindo um turno que não é dela — 403 (só o dono do turno pede)
 POST {{baseUrl}}/solicitacoes-troca
 Content-Type: application/json
 
 {
-  "turnoId": "{{turnoAprovar.response.body.$.turno.id}}"
+  "turnoId": "{{turnoLivre.response.body.$.turno.id}}",
+  "destinatarioId": "{{loginJoao.response.body.$.user.id}}"
 }
 
-### ═══ SUPERVISOR — listar, ver, aprovar e rejeitar ═══
+### 31. Aceitar a solicitação "aprovar" — 200, status "aguardando_aprovacao"; o turno ainda é do João
+POST {{baseUrl}}/solicitacoes-troca/{{solicitacaoAprovar.response.body.$.solicitacao.id}}/aceitar
 
-### 22. Login do supervisor
+### 32. Aceitar a solicitação "rejeitar" — 200, status "aguardando_aprovacao"
+POST {{baseUrl}}/solicitacoes-troca/{{solicitacaoRejeitar.response.body.$.solicitacao.id}}/aceitar
+
+### 33. Aceitar de novo — 409 (já aceita)
+POST {{baseUrl}}/solicitacoes-troca/{{solicitacaoAprovar.response.body.$.solicitacao.id}}/aceitar
+
+### 34. Recusar depois de ter aceitado — 409
+POST {{baseUrl}}/solicitacoes-troca/{{solicitacaoAprovar.response.body.$.solicitacao.id}}/recusar
+Content-Type: application/json
+
+{}
+
+### 35. Aceitar um pedido que o João cancelou — 409
+POST {{baseUrl}}/solicitacoes-troca/{{solicitacaoCancelar.response.body.$.solicitacao.id}}/aceitar
+
+### 36. Aceitar solicitação inexistente — 404
+POST {{baseUrl}}/solicitacoes-troca/id-que-nao-existe/aceitar
+
+### 37. Recusar a solicitação "recusar" com motivo — 200, status "recusada"
+POST {{baseUrl}}/solicitacoes-troca/{{solicitacaoRecusar.response.body.$.solicitacao.id}}/recusar
+Content-Type: application/json
+
+{
+  "motivo": "Tenho consulta nesse dia"
+}
+
+### 38. Recusar de novo — 409
+POST {{baseUrl}}/solicitacoes-troca/{{solicitacaoRecusar.response.body.$.solicitacao.id}}/recusar
+Content-Type: application/json
+
+{}
+
+### 39. Recusar com JSON inválido — 400
+POST {{baseUrl}}/solicitacoes-troca/{{solicitacaoPendente.response.body.$.solicitacao.id}}/recusar
+Content-Type: application/json
+
+{ isto não é json }
+
+### 40. Pedidos recebidos agora — 200 (só o "pendente"; os outros já foram respondidos)
+GET {{baseUrl}}/solicitacoes-troca/recebidas
+
+### ═══ SUPERVISOR — decidir o que já foi aceito ═══
+
+### 41. Login do supervisor
 POST {{baseUrl}}/api/auth/sign-in/email
 Content-Type: application/json
 Origin: {{origin}}
@@ -228,85 +379,72 @@ Origin: {{origin}}
   "password": "{{senha}}"
 }
 
-### 23. Listar todas — 200 { solicitacoes: [...] }
+### 42. Listar todas — 200 { solicitacoes: [...] }
 GET {{baseUrl}}/solicitacoes-troca
 
-### 24. Listar só as pendentes — 200 (A e B)
-GET {{baseUrl}}/solicitacoes-troca?status=pendente
+### 43. Só as que aguardam a decisão dele — 200 ("aprovar" e "rejeitar")
+GET {{baseUrl}}/solicitacoes-troca?status=aguardando_aprovacao
 
-### 25. Filtro com status inválido — 400
+### 44. Filtro com status inválido — 400
 GET {{baseUrl}}/solicitacoes-troca?status=qualquer
 
-### 26. Ver qualquer solicitação — 200
+### 45. Ver qualquer solicitação — 200
 GET {{baseUrl}}/solicitacoes-troca/{{solicitacaoAprovar.response.body.$.solicitacao.id}}
 
-### 27. Supervisor tentando solicitar troca — 403 (só funcionário)
+### 46. Supervisor tentando pedir uma troca — 403 (só funcionário)
 POST {{baseUrl}}/solicitacoes-troca
 Content-Type: application/json
 
 {
-  "turnoId": "{{turnoAprovar.response.body.$.turno.id}}"
+  "turnoId": "{{turnoLivre.response.body.$.turno.id}}",
+  "destinatarioId": "{{loginMaria.response.body.$.user.id}}"
 }
 
-### 28. Supervisor tentando ver os disponíveis — 403 (rota de funcionário)
-GET {{baseUrl}}/solicitacoes-troca/disponiveis
+### 47. Supervisor tentando ver os pedidos recebidos — 403 (rota de funcionário)
+GET {{baseUrl}}/solicitacoes-troca/recebidas
 
-### 29. Supervisor tentando cancelar — 403 (rota de funcionário)
-POST {{baseUrl}}/solicitacoes-troca/{{solicitacaoAprovar.response.body.$.solicitacao.id}}/cancelar
+### 48. Supervisor tentando aceitar — 403 (rota de funcionário)
+POST {{baseUrl}}/solicitacoes-troca/{{solicitacaoPendente.response.body.$.solicitacao.id}}/aceitar
 
-### 30. Aprovar sem destinatarioId — 400
-POST {{baseUrl}}/solicitacoes-troca/{{solicitacaoAprovar.response.body.$.solicitacao.id}}/aprovar
+### 49. Supervisor tentando recusar — 403 (rota de funcionário)
+POST {{baseUrl}}/solicitacoes-troca/{{solicitacaoPendente.response.body.$.solicitacao.id}}/recusar
 Content-Type: application/json
 
 {}
 
-### 31. Aprovar com destinatário inexistente — 404
-POST {{baseUrl}}/solicitacoes-troca/{{solicitacaoAprovar.response.body.$.solicitacao.id}}/aprovar
+### 50. Supervisor tentando cancelar — 403 (rota de funcionário)
+POST {{baseUrl}}/solicitacoes-troca/{{solicitacaoAprovar.response.body.$.solicitacao.id}}/cancelar
+
+### 51. Aprovar um pedido que a Maria ainda não aceitou — 409
+POST {{baseUrl}}/solicitacoes-troca/{{solicitacaoPendente.response.body.$.solicitacao.id}}/aprovar
+
+### 52. Rejeitar um pedido que a Maria ainda não aceitou — 409
+POST {{baseUrl}}/solicitacoes-troca/{{solicitacaoPendente.response.body.$.solicitacao.id}}/rejeitar
 Content-Type: application/json
 
 {
-  "destinatarioId": "funcionario-que-nao-existe"
+  "motivo": "Equipe reduzida"
 }
 
-### 32. Aprovar indicando o próprio solicitante (João) — 409 (o conflito de horário com o próprio turno é checado antes)
-POST {{baseUrl}}/solicitacoes-troca/{{solicitacaoAprovar.response.body.$.solicitacao.id}}/aprovar
-Content-Type: application/json
+### 53. Aprovar um pedido que a Maria recusou — 409
+POST {{baseUrl}}/solicitacoes-troca/{{solicitacaoRecusar.response.body.$.solicitacao.id}}/aprovar
 
-{
-  "destinatarioId": "{{loginJoao.response.body.$.user.id}}"
-}
-
-### 33. Aprovar solicitação inexistente — 404
+### 54. Aprovar solicitação inexistente — 404
 POST {{baseUrl}}/solicitacoes-troca/id-que-nao-existe/aprovar
-Content-Type: application/json
 
-{
-  "destinatarioId": "{{loginMaria.response.body.$.user.id}}"
-}
-
-### 34. Aprovar A indicando a Maria — 200, status "aprovada", turno passa para a Maria
+### 55. Aprovar o pedido aceito — 200, status "aprovada", o turno passa para a Maria
 POST {{baseUrl}}/solicitacoes-troca/{{solicitacaoAprovar.response.body.$.solicitacao.id}}/aprovar
-Content-Type: application/json
 
-{
-  "destinatarioId": "{{loginMaria.response.body.$.user.id}}"
-}
-
-### 35. Aprovar de novo — 409 (o turno já é da Maria / a solicitação já não está pendente)
+### 56. Aprovar de novo — 409
 POST {{baseUrl}}/solicitacoes-troca/{{solicitacaoAprovar.response.body.$.solicitacao.id}}/aprovar
-Content-Type: application/json
 
-{
-  "destinatarioId": "{{loginMaria.response.body.$.user.id}}"
-}
-
-### 36. Rejeitar B sem motivo — 400
+### 57. Rejeitar sem motivo — 400
 POST {{baseUrl}}/solicitacoes-troca/{{solicitacaoRejeitar.response.body.$.solicitacao.id}}/rejeitar
 Content-Type: application/json
 
 {}
 
-### 37. Rejeitar solicitação inexistente — 404
+### 58. Rejeitar solicitação inexistente — 404
 POST {{baseUrl}}/solicitacoes-troca/id-que-nao-existe/rejeitar
 Content-Type: application/json
 
@@ -314,7 +452,7 @@ Content-Type: application/json
   "motivo": "Equipe reduzida"
 }
 
-### 38. Rejeitar B com motivo — 200, status "rejeitada"
+### 59. Rejeitar o pedido aceito, com motivo — 200, status "rejeitada"; o turno continua com o João
 POST {{baseUrl}}/solicitacoes-troca/{{solicitacaoRejeitar.response.body.$.solicitacao.id}}/rejeitar
 Content-Type: application/json
 
@@ -322,69 +460,89 @@ Content-Type: application/json
   "motivo": "Equipe reduzida nesse dia"
 }
 
-### 39. Rejeitar de novo — 409
+### 60. Rejeitar de novo — 409
 POST {{baseUrl}}/solicitacoes-troca/{{solicitacaoRejeitar.response.body.$.solicitacao.id}}/rejeitar
 Content-Type: application/json
 
 {
   "motivo": "Equipe reduzida nesse dia"
-}
-
-### 40. Aprovar a solicitação já cancelada (C) — 409
-POST {{baseUrl}}/solicitacoes-troca/{{solicitacaoCancelar.response.body.$.solicitacao.id}}/aprovar
-Content-Type: application/json
-
-{
-  "destinatarioId": "{{loginMaria.response.body.$.user.id}}"
 }
 
 ### ═══ CONFERÊNCIA FINAL (supervisor) ═══
 
-### 41. Aprovadas — 200 (A, com destinatarioId, decididoPorId e decididoEm)
+### 61. Aprovadas — 200 (com decididoPorId e decididoEm)
 GET {{baseUrl}}/solicitacoes-troca?status=aprovada
 
-### 42. Rejeitadas — 200 (B, com motivo)
+### 62. Rejeitadas — 200 (com motivo)
 GET {{baseUrl}}/solicitacoes-troca?status=rejeitada
 
-### 43. Canceladas — 200 (C)
+### 63. Recusadas — 200 (com respondidaEm e o motivo da Maria)
+GET {{baseUrl}}/solicitacoes-troca?status=recusada
+
+### 64. Canceladas — 200
 GET {{baseUrl}}/solicitacoes-troca?status=cancelada
 
-### 44. Expiradas — 200 (vazio aqui; a API expira sozinha, a cada minuto, as pendentes de turnos já iniciados)
+### 65. Pendentes — 200 (o pedido "pendente" ainda espera a Maria)
+GET {{baseUrl}}/solicitacoes-troca?status=pendente
+
+### 66. Expiradas — 200 (a API expira sozinha, a cada minuto, as em aberto de turnos já iniciados)
 GET {{baseUrl}}/solicitacoes-troca?status=expirada
+
+### ═══ LIMPEZA — o João cancela o pedido que ficou pendente ═══
+
+### 67. Login do João
+POST {{baseUrl}}/api/auth/sign-in/email
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "email": "joao@example.com",
+  "password": "{{senha}}"
+}
+
+### 68. Cancelar o pedido "pendente" — 200, status "cancelada"
+POST {{baseUrl}}/solicitacoes-troca/{{solicitacaoPendente.response.body.$.solicitacao.id}}/cancelar
 
 ### ═══ SEM SESSÃO — tudo deve devolver 401 ═══
 
-### 45. Listar sem sessão — 401
+### 69. Listar sem sessão — 401
 # @no-cookie-jar
 GET {{baseUrl}}/solicitacoes-troca
 
-### 46. Solicitar sem sessão — 401
+### 70. Pedir sem sessão — 401
 # @no-cookie-jar
 POST {{baseUrl}}/solicitacoes-troca
 Content-Type: application/json
 
 {
-  "turnoId": "qualquer"
-}
-
-### 47. Disponíveis sem sessão — 401
-# @no-cookie-jar
-GET {{baseUrl}}/solicitacoes-troca/disponiveis
-
-### 48. Ver por id sem sessão — 401
-# @no-cookie-jar
-GET {{baseUrl}}/solicitacoes-troca/qualquer
-
-### 49. Aprovar sem sessão — 401
-# @no-cookie-jar
-POST {{baseUrl}}/solicitacoes-troca/qualquer/aprovar
-Content-Type: application/json
-
-{
+  "turnoId": "qualquer",
   "destinatarioId": "qualquer"
 }
 
-### 50. Rejeitar sem sessão — 401
+### 71. Recebidas sem sessão — 401
+# @no-cookie-jar
+GET {{baseUrl}}/solicitacoes-troca/recebidas
+
+### 72. Ver por id sem sessão — 401
+# @no-cookie-jar
+GET {{baseUrl}}/solicitacoes-troca/qualquer
+
+### 73. Aceitar sem sessão — 401
+# @no-cookie-jar
+POST {{baseUrl}}/solicitacoes-troca/qualquer/aceitar
+
+### 74. Recusar sem sessão — 401
+# @no-cookie-jar
+POST {{baseUrl}}/solicitacoes-troca/qualquer/recusar
+Content-Type: application/json
+
+{}
+
+### 75. Aprovar sem sessão — 401
+# @no-cookie-jar
+POST {{baseUrl}}/solicitacoes-troca/qualquer/aprovar
+
+### 76. Rejeitar sem sessão — 401
 # @no-cookie-jar
 POST {{baseUrl}}/solicitacoes-troca/qualquer/rejeitar
 Content-Type: application/json
@@ -393,6 +551,6 @@ Content-Type: application/json
   "motivo": "qualquer"
 }
 
-### 51. Cancelar sem sessão — 401
+### 77. Cancelar sem sessão — 401
 # @no-cookie-jar
 POST {{baseUrl}}/solicitacoes-troca/qualquer/cancelar

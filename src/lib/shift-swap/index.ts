@@ -1,4 +1,5 @@
 import {
+  AceitarTrocaTurnoUseCase,
   AprovarTrocaTurnoUseCase,
   BuscarSolicitacaoTrocaTurnoPorIdUseCase,
   CancelarTrocaTurnoUseCase,
@@ -8,9 +9,10 @@ import {
   ExpirarSolicitacoesTrocaTurnoUseCase,
   ListarFuncionariosUseCase,
   ListarSolicitacoesTrocaTurnoUseCase,
-  ListarTurnosDisponiveisParaTrocaUseCase,
+  ListarSolicitacoesRecebidasTrocaTurnoUseCase,
   ListarTurnosPorFuncionarioEDataUseCase,
   ListarTurnosUseCase,
+  RecusarTrocaTurnoUseCase,
   RejeitarTrocaTurnoUseCase,
   SolicitarTrocaTurnoUseCase,
 } from "shift-swap";
@@ -32,16 +34,17 @@ export const listarTurnos = new ListarTurnosUseCase(turnoRepository);
 export const listarTurnosPorFuncionarioEData = new ListarTurnosPorFuncionarioEDataUseCase(turnoRepository);
 export const criarTurno = new CriarTurnoUseCase(turnoRepository);
 
-export const solicitarTrocaTurno = new SolicitarTrocaTurnoUseCase(turnoRepository, solicitacaoRepository);
-export const aprovarTrocaTurno = new AprovarTrocaTurnoUseCase(
-  supervisorRepository,
-  funcionarioRepository,
+export const solicitarTrocaTurno = new SolicitarTrocaTurnoUseCase(
   turnoRepository,
+  funcionarioRepository,
   solicitacaoRepository,
 );
+export const aceitarTrocaTurno = new AceitarTrocaTurnoUseCase(turnoRepository, solicitacaoRepository);
+export const recusarTrocaTurno = new RecusarTrocaTurnoUseCase(solicitacaoRepository);
+export const aprovarTrocaTurno = new AprovarTrocaTurnoUseCase(supervisorRepository, turnoRepository, solicitacaoRepository);
 export const rejeitarTrocaTurno = new RejeitarTrocaTurnoUseCase(supervisorRepository, solicitacaoRepository);
 export const cancelarTrocaTurno = new CancelarTrocaTurnoUseCase(solicitacaoRepository);
 export const expirarSolicitacoesTrocaTurno = new ExpirarSolicitacoesTrocaTurnoUseCase(solicitacaoRepository);
 export const listarSolicitacoesTrocaTurno = new ListarSolicitacoesTrocaTurnoUseCase(solicitacaoRepository);
-export const listarTurnosDisponiveisParaTroca = new ListarTurnosDisponiveisParaTrocaUseCase(solicitacaoRepository);
+export const listarSolicitacoesRecebidas = new ListarSolicitacoesRecebidasTrocaTurnoUseCase(solicitacaoRepository);
 export const buscarSolicitacaoTrocaTurnoPorId = new BuscarSolicitacaoTrocaTurnoPorIdUseCase(solicitacaoRepository);

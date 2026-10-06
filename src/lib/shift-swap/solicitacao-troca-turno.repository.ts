@@ -5,8 +5,9 @@ import type { Pool } from "pg";
 interface SolicitacaoRow {
   id: string;
   solicitante_id: string;
-  destinatario_id: string | null;
+  destinatario_id: string;
   status: StatusSolicitacaoTrocaTurno;
+  respondida_em: Date | null;
   decidido_por_id: string | null;
   decidido_em: Date | null;
   motivo: string | null;
@@ -20,8 +21,8 @@ interface SolicitacaoRow {
 // A solicitação sempre é carregada junto com o turno (JOIN), porque a entidade guarda o
 // Turno inteiro e não só o id.
 const SELECT_SOLICITACAO = `
-  SELECT s.id, s.solicitante_id, s.destinatario_id, s.status, s.decidido_por_id,
-         s.decidido_em, s.motivo, s.turno_id,
+  SELECT s.id, s.solicitante_id, s.destinatario_id, s.status, s.respondida_em,
+         s.decidido_por_id, s.decidido_em, s.motivo, s.turno_id,
          t.data AS turno_data, t.hora_inicio AS turno_hora_inicio,
          t.hora_fim AS turno_hora_fim, t.funcionario_id AS turno_funcionario_id
   FROM solicitacao_troca_turno s
@@ -45,7 +46,8 @@ function toEntity(row: SolicitacaoRow): SolicitacaoTrocaTurno {
       turno,
       solicitanteId: row.solicitante_id,
       status: row.status,
-      destinatarioId: row.destinatario_id ?? undefined,
+      destinatarioId: row.destinatario_id,
+      respondidaEm: row.respondida_em ?? undefined,
       decididoPorId: row.decidido_por_id ?? undefined,
       decididoEm: row.decidido_em ?? undefined,
       motivo: row.motivo ?? undefined,
@@ -62,14 +64,16 @@ export class PgSolicitacaoTrocaTurnoRepository extends SolicitacaoTrocaTurnoRepo
   async save(entity: SolicitacaoTrocaTurno): Promise<void> {
     await this.pool.query(
       `INSERT INTO solicitacao_troca_turno
-         (id, turno_id, solicitante_id, destinatario_id, status, decidido_por_id, decidido_em, motivo)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+         (id, turno_id, solicitante_id, destinatario_id, status, respondida_em,
+          decidido_por_id, decidido_em, motivo)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
       [
         entity.id,
         entity.turno.id,
         entity.solicitanteId,
-        entity.destinatarioId ?? null,
+        entity.destinatarioId,
         entity.status,
+        entity.respondidaEm ?? null,
         entity.decididoPorId ?? null,
         entity.decididoEm ?? null,
         entity.motivo ?? null,
@@ -77,17 +81,17 @@ export class PgSolicitacaoTrocaTurnoRepository extends SolicitacaoTrocaTurnoRepo
     );
   }
 
-  // Só os campos que as transições alteram. turno_id e solicitante_id nunca mudam; o dono
-  // do turno é atualizado pelo TurnoRepository (ver AprovarTrocaTurnoUseCase).
+  // Só os campos que as transições alteram. turno_id, solicitante_id e destinatario_id nunca
+  // mudam; o dono do turno é atualizado pelo TurnoRepository (ver AprovarTrocaTurnoUseCase).
   async update(entity: SolicitacaoTrocaTurno): Promise<void> {
     await this.pool.query(
       `UPDATE solicitacao_troca_turno
-       SET destinatario_id = $2, status = $3, decidido_por_id = $4, decidido_em = $5, motivo = $6
+       SET status = $2, respondida_em = $3, decidido_por_id = $4, decidido_em = $5, motivo = $6
        WHERE id = $1`,
       [
         entity.id,
-        entity.destinatarioId ?? null,
         entity.status,
+        entity.respondidaEm ?? null,
         entity.decididoPorId ?? null,
         entity.decididoEm ?? null,
         entity.motivo ?? null,
@@ -110,25 +114,27 @@ export class PgSolicitacaoTrocaTurnoRepository extends SolicitacaoTrocaTurnoRepo
     return result.rows.map(toEntity);
   }
 
-  async findPendentes(): Promise<SolicitacaoTrocaTurno[]> {
+  // "Em aberto" = sem desfecho: pendente (aguarda o destinatário) ou aguardando_aprovacao.
+  async findEmAberto(): Promise<SolicitacaoTrocaTurno[]> {
     const result = await this.pool.query<SolicitacaoRow>(
-      `${SELECT_SOLICITACAO} WHERE s.status = 'pendente'`,
+      `${SELECT_SOLICITACAO} WHERE s.status IN ('pendente', 'aguardando_aprovacao')`,
     );
     return result.rows.map(toEntity);
   }
 
-  async findPendentesByTurnoId(turnoId: string): Promise<SolicitacaoTrocaTurno[]> {
+  async findEmAbertoByTurnoId(turnoId: string): Promise<SolicitacaoTrocaTurno[]> {
     const result = await this.pool.query<SolicitacaoRow>(
-      `${SELECT_SOLICITACAO} WHERE s.status = 'pendente' AND s.turno_id = $1`,
+      `${SELECT_SOLICITACAO}
+       WHERE s.status IN ('pendente', 'aguardando_aprovacao') AND s.turno_id = $1`,
       [turnoId],
     );
     return result.rows.map(toEntity);
   }
 
-  async findPendentesExcetoSolicitante(solicitanteId: string): Promise<SolicitacaoTrocaTurno[]> {
+  async findPendentesByDestinatarioId(destinatarioId: string): Promise<SolicitacaoTrocaTurno[]> {
     const result = await this.pool.query<SolicitacaoRow>(
-      `${SELECT_SOLICITACAO} WHERE s.status = 'pendente' AND s.solicitante_id <> $1`,
-      [solicitanteId],
+      `${SELECT_SOLICITACAO} WHERE s.status = 'pendente' AND s.destinatario_id = $1`,
+      [destinatarioId],
     );
     return result.rows.map(toEntity);
   }
