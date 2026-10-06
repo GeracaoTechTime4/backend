@@ -256,6 +256,9 @@ GET {{baseUrl}}/solicitacoes-troca/id-que-nao-existe
 ### 16. Pedidos recebidos pelo João — 200 (nenhum: os pedidos são dele, não para ele)
 GET {{baseUrl}}/solicitacoes-troca/recebidas
 
+### 16b. Pedidos enviados pelo João — 200 (todos os que ele fez, em qualquer status, com solicitanteNome e destinatarioNome)
+GET {{baseUrl}}/solicitacoes-troca/enviadas
+
 ### 17. João tentando listar todas — 403 (só supervisor)
 GET {{baseUrl}}/solicitacoes-troca
 
@@ -508,6 +511,10 @@ POST {{baseUrl}}/solicitacoes-troca/{{solicitacaoPendente.response.body.$.solici
 ### 69. Listar sem sessão — 401
 # @no-cookie-jar
 GET {{baseUrl}}/solicitacoes-troca
+
+### 69b. Enviadas sem sessão — 401
+# @no-cookie-jar
+GET {{baseUrl}}/solicitacoes-troca/enviadas
 
 ### 70. Pedir sem sessão — 401
 # @no-cookie-jar

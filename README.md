@@ -69,6 +69,8 @@ docker compose exec api bun run seed
 - `POST /turnos` — rota privada, só `SUPERVISOR` (401/403 iguais à rota acima). Corpo: `{ data, horaInicio, horaFim, funcionarioId }` (todos obrigatórios). Cria o turno via `CriarTurnoUseCase` e retorna 201; erro de validação de negócio (ex.: horário inválido) retorna 400.
 - `GET /turnos/me?data=YYYY-MM-DD` — rota privada, exige sessão autenticada (qualquer `role`). Lista os turnos do próprio usuário logado (`funcionarioId` vem da sessão, nunca da query) na data informada, via `ListarTurnosPorFuncionarioEDataUseCase`. Retorna 400 se `data` não for informado.
 - `GET /funcionarios` — rota privada, só `SUPERVISOR` (401/403 iguais às rotas de turno). Lista todos os funcionários via `ListarFuncionariosUseCase`.
+- `GET /funcionarios/colegas` — rota privada, só `EMPLOYEE`. Lista os outros funcionários (`id` e `name`, sem e-mail) para quem pede uma troca escolher o destinatário.
+- `GET /turnos/meus` — rota privada, só `EMPLOYEE`. Todos os turnos de quem está logado, em ordem de data e hora.
 
 ### Solicitações de troca de turno
 
@@ -81,10 +83,11 @@ pendente ──B aceita──► aguardando_aprovacao ──supervisor──► 
    └── A cancela / expira
 ```
 
-`aprovada`, `rejeitada`, `recusada`, `cancelada` e `expirada` são finais. O turno só muda de dono na aprovação. Erros: 400 validação, 401 sem sessão, 403 sem permissão (papel errado, ou não é o destinatário/solicitante), 404 não encontrado, 409 transição que o estado atual não permite.
+Toda solicitação na resposta traz `solicitanteNome` e `destinatarioNome`. `aprovada`, `rejeitada`, `recusada`, `cancelada` e `expirada` são finais. O turno só muda de dono na aprovação. Erros: 400 validação, 401 sem sessão, 403 sem permissão (papel errado, ou não é o destinatário/solicitante), 404 não encontrado, 409 transição que o estado atual não permite.
 
 - `POST /solicitacoes-troca` — `EMPLOYEE`. Corpo: `{ turnoId, destinatarioId }`. Só o dono do turno pode pedir, e só uma solicitação em aberto por turno. Retorna 201 com status `pendente`.
 - `GET /solicitacoes-troca/recebidas` — `EMPLOYEE`. Pedidos `pendente` endereçados a quem está logado.
+- `GET /solicitacoes-troca/enviadas` — `EMPLOYEE`. Pedidos que o usuário logado fez, em qualquer status.
 - `POST /solicitacoes-troca/:id/aceitar` — `EMPLOYEE`, só o destinatário. Vai para `aguardando_aprovacao`; falha com 409 se ele já tiver turno no horário.
 - `POST /solicitacoes-troca/:id/recusar` — `EMPLOYEE`, só o destinatário. Corpo opcional: `{ motivo }`. Encerra como `recusada`.
 - `POST /solicitacoes-troca/:id/cancelar` — `EMPLOYEE`, só o solicitante, enquanto `pendente` ou `aguardando_aprovacao`.
