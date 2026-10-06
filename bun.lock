@@ -8,7 +8,7 @@
         "better-auth": "^1.7.6",
         "hono": "^4.13.9",
         "pg": "^8.23.0",
-        "shift-swap": "^0.3.0",
+        "shift-swap": "^0.4.0",
       },
       "devDependencies": {
         "@better-auth/cli": "^1.4.21",
@@ -385,7 +385,7 @@
 
     "set-cookie-parser": ["set-cookie-parser@3.1.2", "", {}, "sha512-5/r/lTwbJ3zQ+qwdUFZYeRNqda7P5HD8zQKqlSjdGt1/S0cjLAphHusj4Y58ahDtWn/g32xrIS58/ikOvwl0Lw=="],
 
-    "shift-swap": ["shift-swap@0.3.0", "", {}, "sha512-ea0DLm0YNxi46nPCzR+f0zIK+yRpGzgSe0+JKmOC5DdXXAvr/ZjmYwNK0nOAQZcpV13WV71MFJDLBkScfH5lHg=="],
+    "shift-swap": ["shift-swap@0.4.0", "", {}, "sha512-rT2aof5lkSbNBH+X8fcDBVG+l5Zm0rRelI5kiylVYL1Q6lQ/bLpS3HMqHKPJCZiPM7Z/4TqUolcfZW3L2IE6eg=="],
 
     "simple-concat": ["simple-concat@1.0.1", "", {}, "sha512-cSFtAPtRhljv69IK0hTVZQ+OfE9nePi/rtJmw5UjHeVyVroEqJXP1sFztKUy1qU+xvz3u/sfYJLa947b7nAN2Q=="],
 

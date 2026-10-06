@@ -23,13 +23,32 @@ CREATE TABLE IF NOT EXISTS turno (
 
 -- Histórico de solicitações de troca: sem ON DELETE CASCADE de propósito, para
 -- não perder auditoria quando um turno/funcionário é removido.
+-- Fluxo: pendente (aguarda o destinatário) -> aguardando_aprovacao (aguarda o supervisor)
+--        -> aprovada | rejeitada; ou pendente -> recusada; cancelada/expirada em aberto.
 CREATE TABLE IF NOT EXISTS solicitacao_troca_turno (
   id TEXT PRIMARY KEY,
   turno_id TEXT NOT NULL REFERENCES turno (id),
   solicitante_id TEXT NOT NULL REFERENCES funcionario (id),
-  destinatario_id TEXT REFERENCES funcionario (id),
-  status TEXT NOT NULL CHECK (status IN ('pendente', 'aprovada', 'rejeitada', 'cancelada', 'expirada')),
+  destinatario_id TEXT NOT NULL REFERENCES funcionario (id),
+  status TEXT NOT NULL,
+  respondida_em TIMESTAMPTZ,
   decidido_por_id TEXT REFERENCES supervisor (id),
   decidido_em TIMESTAMPTZ,
   motivo TEXT
 );
+
+-- Migração (idempotente) de bancos criados antes do aceite do destinatário.
+ALTER TABLE solicitacao_troca_turno ADD COLUMN IF NOT EXISTS respondida_em TIMESTAMPTZ;
+
+-- No modelo antigo o pedido era aberto e não tinha destinatário: as pendentes não têm como
+-- seguir no novo fluxo e são canceladas; nas demais, o solicitante vira destinatário
+-- provisório só para a coluna poder ser NOT NULL.
+UPDATE solicitacao_troca_turno SET status = 'cancelada'
+  WHERE status = 'pendente' AND destinatario_id IS NULL;
+UPDATE solicitacao_troca_turno SET destinatario_id = solicitante_id
+  WHERE destinatario_id IS NULL;
+ALTER TABLE solicitacao_troca_turno ALTER COLUMN destinatario_id SET NOT NULL;
+
+ALTER TABLE solicitacao_troca_turno DROP CONSTRAINT IF EXISTS solicitacao_troca_turno_status_check;
+ALTER TABLE solicitacao_troca_turno ADD CONSTRAINT solicitacao_troca_turno_status_check
+  CHECK (status IN ('pendente', 'aguardando_aprovacao', 'aprovada', 'rejeitada', 'recusada', 'cancelada', 'expirada'));

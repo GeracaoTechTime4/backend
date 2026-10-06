@@ -72,17 +72,30 @@ docker compose exec api bun run seed
 
 ### Solicitações de troca de turno
 
-Funcionários (`EMPLOYEE`) só *solicitam* e cancelam; quem decide é o `SUPERVISOR`. O usuário vem sempre da sessão, nunca do corpo. Ciclo de vida: `pendente` → `aprovada` | `rejeitada` | `cancelada` | `expirada` (todos terminais). Erros: 400 validação, 401 sem sessão, 403 papel errado, 404 não encontrado, 409 solicitação que já não está pendente.
+O funcionário A pede a troca de um turno seu a um colega B (o *destinatário*). B aceita ou recusa; só depois do aceite o `SUPERVISOR` autoriza (aprova) ou não (rejeita). O usuário vem sempre da sessão, nunca do corpo. Ciclo de vida:
 
-- `POST /solicitacoes-troca` — `EMPLOYEE`. Corpo: `{ turnoId }`. Só o dono do turno pode pedir; só uma pendente por turno. Retorna 201.
-- `GET /solicitacoes-troca/disponiveis` — `EMPLOYEE`. Pendentes de outros funcionários.
-- `GET /solicitacoes-troca?status=` — `SUPERVISOR`. Todas, com filtro opcional por status.
-- `GET /solicitacoes-troca/:id` — `SUPERVISOR` vê qualquer uma; `EMPLOYEE` só as suas (403 nas demais).
-- `POST /solicitacoes-troca/:id/aprovar` — `SUPERVISOR`. Corpo: `{ destinatarioId }`. Reatribui o turno; falha com 409 se o destinatário já tiver turno no horário.
-- `POST /solicitacoes-troca/:id/rejeitar` — `SUPERVISOR`. Corpo: `{ motivo }` (obrigatório).
-- `POST /solicitacoes-troca/:id/cancelar` — `EMPLOYEE`, só o próprio solicitante (403 caso contrário).
+```
+pendente ──B aceita──► aguardando_aprovacao ──supervisor──► aprovada | rejeitada
+   │                          │
+   ├──B recusa──► recusada    └── A cancela / expira
+   └── A cancela / expira
+```
 
-**Expiração:** ao subir, a API roda a cada 60 s o `ExpirarSolicitacoesTrocaTurnoUseCase`, que expira as pendentes cujo turno já começou. Os turnos são guardados sem fuso, então defina `TZ` no ambiente (ex.: `TZ=America/Sao_Paulo`); no Docker o padrão é UTC.
+`aprovada`, `rejeitada`, `recusada`, `cancelada` e `expirada` são finais. O turno só muda de dono na aprovação. Erros: 400 validação, 401 sem sessão, 403 sem permissão (papel errado, ou não é o destinatário/solicitante), 404 não encontrado, 409 transição que o estado atual não permite.
+
+- `POST /solicitacoes-troca` — `EMPLOYEE`. Corpo: `{ turnoId, destinatarioId }`. Só o dono do turno pode pedir, e só uma solicitação em aberto por turno. Retorna 201 com status `pendente`.
+- `GET /solicitacoes-troca/recebidas` — `EMPLOYEE`. Pedidos `pendente` endereçados a quem está logado.
+- `POST /solicitacoes-troca/:id/aceitar` — `EMPLOYEE`, só o destinatário. Vai para `aguardando_aprovacao`; falha com 409 se ele já tiver turno no horário.
+- `POST /solicitacoes-troca/:id/recusar` — `EMPLOYEE`, só o destinatário. Corpo opcional: `{ motivo }`. Encerra como `recusada`.
+- `POST /solicitacoes-troca/:id/cancelar` — `EMPLOYEE`, só o solicitante, enquanto `pendente` ou `aguardando_aprovacao`.
+- `GET /solicitacoes-troca?status=` — `SUPERVISOR`. Todas, com filtro opcional (ex.: `aguardando_aprovacao`).
+- `GET /solicitacoes-troca/:id` — `SUPERVISOR` vê qualquer uma; `EMPLOYEE` só as que pediu ou recebeu (403 nas demais).
+- `POST /solicitacoes-troca/:id/aprovar` — `SUPERVISOR`, sem corpo. Só em `aguardando_aprovacao`; reatribui o turno ao destinatário (409 se a agenda dele mudou e agora conflita).
+- `POST /solicitacoes-troca/:id/rejeitar` — `SUPERVISOR`. Corpo: `{ motivo }` (obrigatório). Só em `aguardando_aprovacao`.
+
+**Expiração:** ao subir, a API roda a cada 60 s o `ExpirarSolicitacoesTrocaTurnoUseCase`, que expira as solicitações em aberto (`pendente` ou `aguardando_aprovacao`) cujo turno já começou. Os turnos são guardados sem fuso, então defina `TZ` no ambiente (ex.: `TZ=America/Sao_Paulo`); o `docker-compose.yml` já usa esse padrão.
+
+**Banco:** `bun run db:migrate` também migra bancos criados antes do aceite do destinatário (coluna `respondida_em`, novos status e `destinatario_id` obrigatório). Pedidos pendentes do modelo antigo, que não tinham destinatário, são cancelados.
 
 ## Testando os endpoints (REST Client)
 
