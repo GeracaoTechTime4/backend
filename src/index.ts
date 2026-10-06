@@ -2,9 +2,9 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { auth } from "./lib/auth";
 import { iniciarExpiracaoDeSolicitacoes } from "./lib/expirar-solicitacoes";
-import { requireAuth, requireSupervisor } from "./lib/session-middleware";
+import { requireAuth, requireEmployee, requireSupervisor } from "./lib/session-middleware";
 import { criarTurno, listarFuncionarios, listarTurnos, listarTurnosPorFuncionarioEData } from "./lib/shift-swap";
-import { toFuncionarioDTO, toTurnoDTO } from "./lib/shift-swap/dto";
+import { toColegaDTO, toFuncionarioDTO, toTurnoDTO } from "./lib/shift-swap/dto";
 import { solicitacoesTrocaTurno } from "./routes/solicitacoes-troca-turno";
 
 const port = Number(process.env.PORT ?? 3000);
@@ -72,6 +72,37 @@ app.get("/funcionarios", requireAuth, requireSupervisor, async (c) => {
   }
 
   return c.json({ funcionarios: result.getValue().map(toFuncionarioDTO) });
+});
+
+// Funcionário escolhendo um colega para a troca: lista os outros, sem e-mail.
+app.get("/funcionarios/colegas", requireAuth, requireEmployee, async (c) => {
+  const result = await listarFuncionarios.execute();
+
+  if (result.isFailure) {
+    return c.json({ error: result.error }, 500);
+  }
+
+  const meuId = c.get("session").user.id;
+  const colegas = result.getValue().filter((funcionario) => funcionario.id !== meuId);
+
+  return c.json({ colegas: colegas.map(toColegaDTO) });
+});
+
+// Todos os turnos do funcionário logado, em ordem de data e hora.
+app.get("/turnos/meus", requireAuth, requireEmployee, async (c) => {
+  const result = await listarTurnos.execute();
+
+  if (result.isFailure) {
+    return c.json({ error: result.error }, 500);
+  }
+
+  const meuId = c.get("session").user.id;
+  const meus = result
+    .getValue()
+    .filter((turno) => turno.funcionarioId === meuId)
+    .sort((a, b) => `${a.data}T${a.horaInicio}`.localeCompare(`${b.data}T${b.horaInicio}`));
+
+  return c.json({ turnos: meus.map(toTurnoDTO) });
 });
 
 app.get("/turnos/me", requireAuth, async (c) => {

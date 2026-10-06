@@ -7,6 +7,7 @@ import {
   aprovarTrocaTurno,
   buscarSolicitacaoTrocaTurnoPorId,
   cancelarTrocaTurno,
+  listarFuncionarios,
   listarSolicitacoesRecebidas,
   listarSolicitacoesTrocaTurno,
   recusarTrocaTurno,
@@ -59,6 +60,13 @@ async function lerBodyOpcional<T extends object>(c: Context): Promise<T | null> 
   }
 }
 
+// id -> nome de todos os funcionários, para a resposta já trazer quem pediu e quem recebeu.
+async function nomesDosFuncionarios(): Promise<Map<string, string>> {
+  const result = await listarFuncionarios.execute();
+  const funcionarios = result.isSuccess ? result.getValue() : [];
+  return new Map(funcionarios.map((funcionario) => [funcionario.id, funcionario.name.value]));
+}
+
 export const solicitacoesTrocaTurno = new Hono<Env>();
 
 solicitacoesTrocaTurno.use("*", requireAuth);
@@ -85,7 +93,7 @@ solicitacoesTrocaTurno.post("/", requireEmployee, async (c) => {
     return c.json({ error: result.error }, statusDoErro(result.error));
   }
 
-  return c.json({ solicitacao: toSolicitacaoTrocaTurnoDTO(result.getValue()) }, 201);
+  return c.json({ solicitacao: toSolicitacaoTrocaTurnoDTO(result.getValue(), await nomesDosFuncionarios()) }, 201);
 });
 
 // Funcionário B: pedidos de troca endereçados a ele que ainda esperam a resposta dele.
@@ -96,7 +104,24 @@ solicitacoesTrocaTurno.get("/recebidas", requireEmployee, async (c) => {
     return c.json({ error: result.error }, 500);
   }
 
-  return c.json({ solicitacoes: result.getValue().map(toSolicitacaoTrocaTurnoDTO) });
+  const nomes = await nomesDosFuncionarios();
+
+  return c.json({ solicitacoes: result.getValue().map((s) => toSolicitacaoTrocaTurnoDTO(s, nomes)) });
+});
+
+// Funcionário A: pedidos que ele fez, em qualquer status (para acompanhar a resposta).
+solicitacoesTrocaTurno.get("/enviadas", requireEmployee, async (c) => {
+  const result = await listarSolicitacoesTrocaTurno.execute();
+
+  if (result.isFailure) {
+    return c.json({ error: result.error }, 500);
+  }
+
+  const meuId = c.get("session").user.id;
+  const enviadas = result.getValue().filter((solicitacao) => solicitacao.solicitanteId === meuId);
+  const nomes = await nomesDosFuncionarios();
+
+  return c.json({ solicitacoes: enviadas.map((s) => toSolicitacaoTrocaTurnoDTO(s, nomes)) });
 });
 
 // Supervisor: todas as solicitações, com filtro opcional ?status= (ex.: aguardando_aprovacao).
@@ -115,7 +140,9 @@ solicitacoesTrocaTurno.get("/", requireSupervisor, async (c) => {
 
   const solicitacoes = result.getValue().filter((solicitacao) => !status || solicitacao.status === status);
 
-  return c.json({ solicitacoes: solicitacoes.map(toSolicitacaoTrocaTurnoDTO) });
+  const nomes = await nomesDosFuncionarios();
+
+  return c.json({ solicitacoes: solicitacoes.map((s) => toSolicitacaoTrocaTurnoDTO(s, nomes)) });
 });
 
 // Supervisor vê qualquer uma; funcionário só as suas (como solicitante ou destinatário).
@@ -135,7 +162,7 @@ solicitacoesTrocaTurno.get("/:id", async (c) => {
     return c.json({ error: "Forbidden" }, 403);
   }
 
-  return c.json({ solicitacao: toSolicitacaoTrocaTurnoDTO(solicitacao) });
+  return c.json({ solicitacao: toSolicitacaoTrocaTurnoDTO(solicitacao, await nomesDosFuncionarios()) });
 });
 
 // Funcionário B aceita: a solicitação passa a "aguardando_aprovacao" (decide o supervisor).
@@ -149,7 +176,7 @@ solicitacoesTrocaTurno.post("/:id/aceitar", requireEmployee, async (c) => {
     return c.json({ error: result.error }, statusDoErro(result.error));
   }
 
-  return c.json({ solicitacao: toSolicitacaoTrocaTurnoDTO(result.getValue()) });
+  return c.json({ solicitacao: toSolicitacaoTrocaTurnoDTO(result.getValue(), await nomesDosFuncionarios()) });
 });
 
 // Funcionário B recusa (motivo opcional): a solicitação é encerrada como "recusada".
@@ -170,7 +197,7 @@ solicitacoesTrocaTurno.post("/:id/recusar", requireEmployee, async (c) => {
     return c.json({ error: result.error }, statusDoErro(result.error));
   }
 
-  return c.json({ solicitacao: toSolicitacaoTrocaTurnoDTO(result.getValue()) });
+  return c.json({ solicitacao: toSolicitacaoTrocaTurnoDTO(result.getValue(), await nomesDosFuncionarios()) });
 });
 
 // Supervisor autoriza uma troca que o destinatário já aceitou; o turno passa para ele.
@@ -184,7 +211,7 @@ solicitacoesTrocaTurno.post("/:id/aprovar", requireSupervisor, async (c) => {
     return c.json({ error: result.error }, statusDoErro(result.error));
   }
 
-  return c.json({ solicitacao: toSolicitacaoTrocaTurnoDTO(result.getValue()) });
+  return c.json({ solicitacao: toSolicitacaoTrocaTurnoDTO(result.getValue(), await nomesDosFuncionarios()) });
 });
 
 solicitacoesTrocaTurno.post("/:id/rejeitar", requireSupervisor, async (c) => {
@@ -207,7 +234,7 @@ solicitacoesTrocaTurno.post("/:id/rejeitar", requireSupervisor, async (c) => {
     return c.json({ error: result.error }, statusDoErro(result.error));
   }
 
-  return c.json({ solicitacao: toSolicitacaoTrocaTurnoDTO(result.getValue()) });
+  return c.json({ solicitacao: toSolicitacaoTrocaTurnoDTO(result.getValue(), await nomesDosFuncionarios()) });
 });
 
 // Funcionário A cancela a própria solicitação enquanto não houver desfecho
@@ -222,5 +249,5 @@ solicitacoesTrocaTurno.post("/:id/cancelar", requireEmployee, async (c) => {
     return c.json({ error: result.error }, statusDoErro(result.error));
   }
 
-  return c.json({ solicitacao: toSolicitacaoTrocaTurnoDTO(result.getValue()) });
+  return c.json({ solicitacao: toSolicitacaoTrocaTurnoDTO(result.getValue(), await nomesDosFuncionarios()) });
 });

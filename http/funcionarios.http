@@ -34,3 +34,33 @@ GET {{baseUrl}}/funcionarios
 ### 5. Sem sessão — 401
 # @no-cookie-jar
 GET {{baseUrl}}/funcionarios
+
+### 6. Login do João (funcionário)
+POST {{baseUrl}}/api/auth/sign-in/email
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "email": "joao@example.com",
+  "password": "{{senha}}"
+}
+
+### 7. Colegas para escolher na troca (EMPLOYEE) — 200 { colegas: [{ id, name }] }, sem e-mail e sem ele mesmo
+GET {{baseUrl}}/funcionarios/colegas
+
+### 8. Login do supervisor
+POST {{baseUrl}}/api/auth/sign-in/email
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "email": "supervisor@example.com",
+  "password": "{{senha}}"
+}
+
+### 9. Supervisor tentando listar colegas — 403 (rota de funcionário)
+GET {{baseUrl}}/funcionarios/colegas
+
+### 10. Colegas sem sessão — 401
+# @no-cookie-jar
+GET {{baseUrl}}/funcionarios/colegas

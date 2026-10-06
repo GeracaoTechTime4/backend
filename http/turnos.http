@@ -97,6 +97,13 @@ GET {{baseUrl}}/turnos/me?data={{$datetime "YYYY-MM-DD"}}
 ### 11. Meus turnos de 2099-12-01 (o do passo 4) — 200
 GET {{baseUrl}}/turnos/me?data=2099-12-01
 
+### 11b. Todos os meus turnos, em ordem de data (EMPLOYEE) — 200 { turnos: [...] }
+GET {{baseUrl}}/turnos/meus
+
+### 11c. Todos os meus turnos sem sessão — 401
+# @no-cookie-jar
+GET {{baseUrl}}/turnos/meus
+
 ### 12. Meus turnos sem informar a data — 400
 GET {{baseUrl}}/turnos/me
 
