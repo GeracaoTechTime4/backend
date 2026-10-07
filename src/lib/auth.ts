@@ -1,5 +1,5 @@
 import { betterAuth } from "better-auth";
-import { pool } from "./db";
+import { authDatabase } from "./db";
 import { criarFuncionario, criarSupervisor } from "./shift-swap";
 
 const trustedOrigins = (process.env.CORS_ORIGIN ?? "http://localhost:5173")
@@ -8,7 +8,7 @@ const trustedOrigins = (process.env.CORS_ORIGIN ?? "http://localhost:5173")
   .filter(Boolean);
 
 export const auth = betterAuth({
-  database: pool,
+  database: authDatabase,
   secret: process.env.BETTER_AUTH_SECRET,
   baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
   trustedOrigins,

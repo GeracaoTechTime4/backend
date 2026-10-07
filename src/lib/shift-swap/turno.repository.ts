@@ -1,5 +1,5 @@
 import { Turno, TurnoRepository } from "shift-swap";
-import type { Pool } from "pg";
+import type { Db } from "../db";
 
 interface TurnoRow {
   id: string;
@@ -17,7 +17,7 @@ function toEntity(row: TurnoRow): Turno {
 }
 
 export class PgTurnoRepository extends TurnoRepository {
-  constructor(private readonly pool: Pool) {
+  constructor(private readonly pool: Db) {
     super();
   }
 

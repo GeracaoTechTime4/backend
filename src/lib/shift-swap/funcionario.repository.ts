@@ -1,8 +1,8 @@
 import { FuncionarioEntity, FuncionarioRepository } from "shift-swap";
-import type { Pool } from "pg";
+import type { Db } from "../db";
 
 export class PgFuncionarioRepository extends FuncionarioRepository {
-  constructor(private readonly pool: Pool) {
+  constructor(private readonly pool: Db) {
     super();
   }
 
