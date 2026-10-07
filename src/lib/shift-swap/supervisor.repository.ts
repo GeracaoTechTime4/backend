@@ -1,8 +1,8 @@
 import { SupervisorEntity, SupervisorRepository } from "shift-swap";
-import type { Pool } from "pg";
+import type { Db } from "../db";
 
 export class PgSupervisorRepository extends SupervisorRepository {
-  constructor(private readonly pool: Pool) {
+  constructor(private readonly pool: Db) {
     super();
   }
 

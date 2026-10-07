@@ -16,11 +16,16 @@ API de troca de plantões com autenticação via [Better Auth](https://www.bette
    cp .env.example .env
    ```
 
-3. Suba apenas o Postgres (ou use um Postgres já existente):
+3. Escolha o banco:
 
-   ```bash
-   docker compose up -d postgres
-   ```
+   - **Sem Docker (padrão):** deixe `DATABASE_URL` vazia (ou `pglite:./.data/pglite`) no `.env`. A API usa o [PGlite](https://pglite.dev), um Postgres embutido que grava em `./.data/` — nada para instalar nem subir. Para zerar o banco, apague essa pasta.
+   - **Com Postgres:** defina `DATABASE_URL=postgresql://shift_swap:shift_swap@localhost:5432/shift_swap` e suba só o Postgres (ou use um já existente):
+
+     ```bash
+     docker compose up -d postgres
+     ```
+
+   O schema é o mesmo nos dois (`src/db/schema.sql`). O PGlite é só para desenvolvimento; produção e o `docker compose` usam Postgres.
 
 4. Aplique o schema do Better Auth e o schema de domínio (tabelas `funcionario`/`supervisor`) no banco:
 

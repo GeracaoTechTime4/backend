@@ -1,6 +1,6 @@
 import { SolicitacaoTrocaTurno, SolicitacaoTrocaTurnoRepository, Turno } from "shift-swap";
 import type { StatusSolicitacaoTrocaTurno } from "shift-swap";
-import type { Pool } from "pg";
+import type { Db } from "../db";
 
 interface SolicitacaoRow {
   id: string;
@@ -57,7 +57,7 @@ function toEntity(row: SolicitacaoRow): SolicitacaoTrocaTurno {
 }
 
 export class PgSolicitacaoTrocaTurnoRepository extends SolicitacaoTrocaTurnoRepository {
-  constructor(private readonly pool: Pool) {
+  constructor(private readonly pool: Db) {
     super();
   }
 
