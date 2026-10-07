@@ -3,7 +3,14 @@ import { cors } from "hono/cors";
 import { auth } from "./lib/auth";
 import { iniciarExpiracaoDeSolicitacoes } from "./lib/expirar-solicitacoes";
 import { requireAuth, requireEmployee, requireSupervisor } from "./lib/session-middleware";
-import { criarTurno, listarFuncionarios, listarTurnos, listarTurnosPorFuncionarioEData } from "./lib/shift-swap";
+import {
+  atualizarTurno,
+  criarTurno,
+  listarFuncionarios,
+  listarTurnos,
+  listarTurnosPorFuncionarioEData,
+  removerTurno,
+} from "./lib/shift-swap";
 import { toColegaDTO, toFuncionarioDTO, toTurnoDTO } from "./lib/shift-swap/dto";
 import { solicitacoesTrocaTurno } from "./routes/solicitacoes-troca-turno";
 
@@ -55,13 +62,75 @@ app.post("/turnos", requireAuth, requireSupervisor, async (c) => {
     return c.json({ error: "data, horaInicio, horaFim e funcionarioId são obrigatórios" }, 400);
   }
 
-  const result = await criarTurno.execute({ data, horaInicio, horaFim, funcionarioId });
+  const result = await criarTurno.execute({
+    data,
+    horaInicio,
+    horaFim,
+    funcionarioId,
+    supervisorId: c.get("session").user.id,
+  });
 
   if (result.isFailure) {
     return c.json({ error: result.error }, 400);
   }
 
   return c.json({ turno: toTurnoDTO(result.getValue()) }, 201);
+});
+
+// O domínio devolve só mensagens de erro, então o status HTTP é inferido delas.
+function statusDoErroDeTurno(error: unknown): 400 | 404 {
+  return String(error).includes("não encontrad") ? 404 : 400;
+}
+
+app.put("/turnos/:id", requireAuth, requireSupervisor, async (c) => {
+  let body: { data?: string; horaInicio?: string; horaFim?: string };
+
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+
+  const { data, horaInicio, horaFim } = body;
+
+  if (!data || !horaInicio || !horaFim) {
+    return c.json({ error: "data, horaInicio e horaFim são obrigatórios" }, 400);
+  }
+
+  const result = await atualizarTurno.execute({
+    id: c.req.param("id"),
+    data,
+    horaInicio,
+    horaFim,
+    supervisorId: c.get("session").user.id,
+  });
+
+  if (result.isFailure) {
+    return c.json({ error: result.error }, statusDoErroDeTurno(result.error));
+  }
+
+  return c.json({ turno: toTurnoDTO(result.getValue()) });
+});
+
+app.delete("/turnos/:id", requireAuth, requireSupervisor, async (c) => {
+  try {
+    const result = await removerTurno.execute({
+      id: c.req.param("id"),
+      supervisorId: c.get("session").user.id,
+    });
+
+    if (result.isFailure) {
+      return c.json({ error: result.error }, statusDoErroDeTurno(result.error));
+    }
+  } catch (error) {
+    // 23503 = foreign_key_violation: o turno tem solicitações de troca no histórico.
+    if ((error as { code?: string }).code === "23503") {
+      return c.json({ error: "Não é possível excluir um turno que possui solicitações de troca" }, 409);
+    }
+    throw error;
+  }
+
+  return c.body(null, 204);
 });
 
 app.get("/funcionarios", requireAuth, requireSupervisor, async (c) => {

@@ -52,7 +52,7 @@ const turnosSeed = [
 ];
 
 for (const turno of turnosSeed) {
-  const result = await criarTurno.execute(turno);
+  const result = await criarTurno.execute({ ...turno, supervisorId });
   if (result.isFailure) {
     console.error(`  falha ao criar turno (${turno.data} ${turno.horaInicio}-${turno.horaFim}): ${result.error}`);
   } else {
