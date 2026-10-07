@@ -66,7 +66,9 @@ docker compose exec api bun run seed
 - `POST /api/auth/sign-in/email` — login.
 - Demais rotas expostas pelo Better Auth ficam sob o prefixo `/api/auth/*` (ver [documentação](https://www.better-auth.com/docs)).
 - `GET /turnos` — rota privada, exige sessão autenticada e `role` `SUPERVISOR` (401 sem sessão, 403 se for `EMPLOYEE`). Lista todos os turnos via `ListarTurnosUseCase`.
-- `POST /turnos` — rota privada, só `SUPERVISOR` (401/403 iguais à rota acima). Corpo: `{ data, horaInicio, horaFim, funcionarioId }` (todos obrigatórios). Cria o turno via `CriarTurnoUseCase` e retorna 201; erro de validação de negócio (ex.: horário inválido) retorna 400.
+- `POST /turnos` — rota privada, só `SUPERVISOR` (401/403 iguais à rota acima). Corpo: `{ data, horaInicio, horaFim, funcionarioId }` (todos obrigatórios; o `supervisorId` vem da sessão). Cria o turno via `CriarTurnoUseCase` e retorna 201; erro de validação de negócio (ex.: horário inválido) retorna 400.
+- `PUT /turnos/:id` — rota privada, só `SUPERVISOR`. Corpo: `{ data, horaInicio, horaFim }` (todos obrigatórios). Altera o horário via `AtualizarTurnoUseCase` e retorna 200 com o turno; horário inválido retorna 400 e turno inexistente 404.
+- `DELETE /turnos/:id` — rota privada, só `SUPERVISOR`. Exclui o turno via `RemoverTurnoUseCase` e retorna 204; turno inexistente retorna 404 e turno com solicitações de troca no histórico retorna 409.
 - `GET /turnos/me?data=YYYY-MM-DD` — rota privada, exige sessão autenticada (qualquer `role`). Lista os turnos do próprio usuário logado (`funcionarioId` vem da sessão, nunca da query) na data informada, via `ListarTurnosPorFuncionarioEDataUseCase`. Retorna 400 se `data` não for informado.
 - `GET /funcionarios` — rota privada, só `SUPERVISOR` (401/403 iguais às rotas de turno). Lista todos os funcionários via `ListarFuncionariosUseCase`.
 - `GET /funcionarios/colegas` — rota privada, só `EMPLOYEE`. Lista os outros funcionários (`id` e `name`, sem e-mail) para quem pede uma troca escolher o destinatário.

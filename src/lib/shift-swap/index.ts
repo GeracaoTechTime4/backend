@@ -1,6 +1,7 @@
 import {
   AceitarTrocaTurnoUseCase,
   AprovarTrocaTurnoUseCase,
+  AtualizarTurnoUseCase,
   BuscarSolicitacaoTrocaTurnoPorIdUseCase,
   CancelarTrocaTurnoUseCase,
   CriarFuncionarioUseCase,
@@ -14,6 +15,7 @@ import {
   ListarTurnosUseCase,
   RecusarTrocaTurnoUseCase,
   RejeitarTrocaTurnoUseCase,
+  RemoverTurnoUseCase,
   SolicitarTrocaTurnoUseCase,
 } from "shift-swap";
 import { pool } from "../db";
@@ -32,7 +34,9 @@ export const criarSupervisor = new CriarSupervisorUseCase(supervisorRepository);
 export const listarFuncionarios = new ListarFuncionariosUseCase(funcionarioRepository);
 export const listarTurnos = new ListarTurnosUseCase(turnoRepository);
 export const listarTurnosPorFuncionarioEData = new ListarTurnosPorFuncionarioEDataUseCase(turnoRepository);
-export const criarTurno = new CriarTurnoUseCase(turnoRepository);
+export const criarTurno = new CriarTurnoUseCase(supervisorRepository, turnoRepository);
+export const atualizarTurno = new AtualizarTurnoUseCase(supervisorRepository, turnoRepository);
+export const removerTurno = new RemoverTurnoUseCase(supervisorRepository, turnoRepository);
 
 export const solicitarTrocaTurno = new SolicitarTrocaTurnoUseCase(
   turnoRepository,
