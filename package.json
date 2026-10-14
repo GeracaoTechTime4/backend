@@ -23,8 +23,9 @@
   },
   "dependencies": {
     "better-auth": "^1.7.6",
+    "core-kernel": "^0.2.0",
     "hono": "^4.13.9",
     "pg": "^8.23.0",
-    "shift-swap": "^0.5.0"
+    "shift-swap": "^0.6.1"
   }
 }

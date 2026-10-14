@@ -34,8 +34,10 @@ export const auth = betterAuth({
           const result =
             role === "SUPERVISOR" ? await criarSupervisor.execute(input) : await criarFuncionario.execute(input);
 
-          if (result.isFailure) {
-            throw new Error(`Failed to create ${role} record for user ${user.id}: ${result.error}`);
+          if (result.isFail()) {
+            throw new Error(`Failed to create ${role} record for user ${user.id}: ${result.error.message}`, {
+              cause: result.error,
+            });
           }
         },
       },

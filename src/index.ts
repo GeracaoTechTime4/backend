@@ -12,6 +12,7 @@ import {
   removerTurno,
 } from "./lib/shift-swap";
 import { toColegaDTO, toFuncionarioDTO, toTurnoDTO } from "./lib/shift-swap/dto";
+import { codigoPostgres, respostaDeErro } from "./lib/shift-swap/http";
 import { solicitacoesTrocaTurno } from "./routes/solicitacoes-troca-turno";
 
 const port = Number(process.env.PORT ?? 3000);
@@ -40,11 +41,11 @@ app.get("/health", (c) => c.json({ status: "ok", timestamp: new Date().toISOStri
 app.get("/turnos", requireAuth, requireSupervisor, async (c) => {
   const result = await listarTurnos.execute();
 
-  if (result.isFailure) {
-    return c.json({ error: result.error }, 500);
+  if (result.isFail()) {
+    return respostaDeErro(c, result.error);
   }
 
-  return c.json({ turnos: result.getValue().map(toTurnoDTO) });
+  return c.json({ turnos: result.value.map(toTurnoDTO) });
 });
 
 app.post("/turnos", requireAuth, requireSupervisor, async (c) => {
@@ -70,17 +71,12 @@ app.post("/turnos", requireAuth, requireSupervisor, async (c) => {
     supervisorId: c.get("session").user.id,
   });
 
-  if (result.isFailure) {
-    return c.json({ error: result.error }, 400);
+  if (result.isFail()) {
+    return respostaDeErro(c, result.error);
   }
 
-  return c.json({ turno: toTurnoDTO(result.getValue()) }, 201);
+  return c.json({ turno: toTurnoDTO(result.value) }, 201);
 });
-
-// O domínio devolve só mensagens de erro, então o status HTTP é inferido delas.
-function statusDoErroDeTurno(error: unknown): 400 | 404 {
-  return String(error).includes("não encontrad") ? 404 : 400;
-}
 
 app.put("/turnos/:id", requireAuth, requireSupervisor, async (c) => {
   let body: { data?: string; horaInicio?: string; horaFim?: string };
@@ -105,29 +101,26 @@ app.put("/turnos/:id", requireAuth, requireSupervisor, async (c) => {
     supervisorId: c.get("session").user.id,
   });
 
-  if (result.isFailure) {
-    return c.json({ error: result.error }, statusDoErroDeTurno(result.error));
+  if (result.isFail()) {
+    return respostaDeErro(c, result.error);
   }
 
-  return c.json({ turno: toTurnoDTO(result.getValue()) });
+  return c.json({ turno: toTurnoDTO(result.value) });
 });
 
 app.delete("/turnos/:id", requireAuth, requireSupervisor, async (c) => {
-  try {
-    const result = await removerTurno.execute({
-      id: c.req.param("id"),
-      supervisorId: c.get("session").user.id,
-    });
+  const result = await removerTurno.execute({
+    id: c.req.param("id"),
+    supervisorId: c.get("session").user.id,
+  });
 
-    if (result.isFailure) {
-      return c.json({ error: result.error }, statusDoErroDeTurno(result.error));
-    }
-  } catch (error) {
-    // 23503 = foreign_key_violation: o turno tem solicitações de troca no histórico.
-    if ((error as { code?: string }).code === "23503") {
+  if (result.isFail()) {
+    // 23503 = foreign_key_violation: o turno tem solicitações de troca no histórico. A exceção
+    // do pg chega como erro UNEXPECTED do use case, com o erro original em `cause`.
+    if (codigoPostgres(result.error) === "23503") {
       return c.json({ error: "Não é possível excluir um turno que possui solicitações de troca" }, 409);
     }
-    throw error;
+    return respostaDeErro(c, result.error);
   }
 
   return c.body(null, 204);
@@ -136,23 +129,23 @@ app.delete("/turnos/:id", requireAuth, requireSupervisor, async (c) => {
 app.get("/funcionarios", requireAuth, requireSupervisor, async (c) => {
   const result = await listarFuncionarios.execute();
 
-  if (result.isFailure) {
-    return c.json({ error: result.error }, 500);
+  if (result.isFail()) {
+    return respostaDeErro(c, result.error);
   }
 
-  return c.json({ funcionarios: result.getValue().map(toFuncionarioDTO) });
+  return c.json({ funcionarios: result.value.map(toFuncionarioDTO) });
 });
 
 // Funcionário escolhendo um colega para a troca: lista os outros, sem e-mail.
 app.get("/funcionarios/colegas", requireAuth, requireEmployee, async (c) => {
   const result = await listarFuncionarios.execute();
 
-  if (result.isFailure) {
-    return c.json({ error: result.error }, 500);
+  if (result.isFail()) {
+    return respostaDeErro(c, result.error);
   }
 
   const meuId = c.get("session").user.id;
-  const colegas = result.getValue().filter((funcionario) => funcionario.id !== meuId);
+  const colegas = result.value.filter((funcionario) => funcionario.id.value !== meuId);
 
   return c.json({ colegas: colegas.map(toColegaDTO) });
 });
@@ -161,14 +154,13 @@ app.get("/funcionarios/colegas", requireAuth, requireEmployee, async (c) => {
 app.get("/turnos/meus", requireAuth, requireEmployee, async (c) => {
   const result = await listarTurnos.execute();
 
-  if (result.isFailure) {
-    return c.json({ error: result.error }, 500);
+  if (result.isFail()) {
+    return respostaDeErro(c, result.error);
   }
 
   const meuId = c.get("session").user.id;
-  const meus = result
-    .getValue()
-    .filter((turno) => turno.funcionarioId === meuId)
+  const meus = result.value
+    .filter((turno) => turno.funcionarioId.value === meuId)
     .sort((a, b) => `${a.data}T${a.horaInicio}`.localeCompare(`${b.data}T${b.horaInicio}`));
 
   return c.json({ turnos: meus.map(toTurnoDTO) });
@@ -187,11 +179,11 @@ app.get("/turnos/me", requireAuth, async (c) => {
     data,
   });
 
-  if (result.isFailure) {
-    return c.json({ error: result.error }, 500);
+  if (result.isFail()) {
+    return respostaDeErro(c, result.error);
   }
 
-  return c.json({ turnos: result.getValue().map(toTurnoDTO) });
+  return c.json({ turnos: result.value.map(toTurnoDTO) });
 });
 
 app.route("/solicitacoes-troca", solicitacoesTrocaTurno);

@@ -1,6 +1,14 @@
-import { SolicitacaoTrocaTurno, SolicitacaoTrocaTurnoRepository, Turno } from "shift-swap";
-import type { StatusSolicitacaoTrocaTurno } from "shift-swap";
+import {
+  FuncionarioId,
+  SolicitacaoTrocaTurno,
+  SolicitacaoTrocaTurnoId,
+  type SolicitacaoTrocaTurnoRepository,
+  type StatusSolicitacaoTrocaTurno,
+  SupervisorId,
+  type TurnoId,
+} from "shift-swap";
 import type { Db } from "../db";
+import { turnoDaLinha } from "./turno.repository";
 
 interface SolicitacaoRow {
   id: string;
@@ -29,52 +37,51 @@ const SELECT_SOLICITACAO = `
   JOIN turno t ON t.id = s.turno_id`;
 
 function toEntity(row: SolicitacaoRow): SolicitacaoTrocaTurno {
-  const turno = Turno.create(
-    {
-      data: row.turno_data,
-      horaInicio: row.turno_hora_inicio,
-      horaFim: row.turno_hora_fim,
-      funcionarioId: row.turno_funcionario_id,
-    },
-    row.turno_id,
-  ).getValue();
+  const turno = turnoDaLinha({
+    id: row.turno_id,
+    data: row.turno_data,
+    hora_inicio: row.turno_hora_inicio,
+    hora_fim: row.turno_hora_fim,
+    funcionario_id: row.turno_funcionario_id,
+  });
 
   // reconstituir (e não create + transições): devolve a solicitação exatamente como foi
-  // salva, sem reatribuir o turno nem regravar decididoEm.
+  // salva, sem reatribuir o turno nem regravar decididoEm. Ele confere a coerência dos dados
+  // com o status; dado incoerente no banco faz o unwrap lançar (erro UNEXPECTED no use case).
   return SolicitacaoTrocaTurno.reconstituir(
     {
       turno,
-      solicitanteId: row.solicitante_id,
+      solicitanteId: FuncionarioId.from(row.solicitante_id).unwrap(),
       status: row.status,
-      destinatarioId: row.destinatario_id,
+      destinatarioId: FuncionarioId.from(row.destinatario_id).unwrap(),
       respondidaEm: row.respondida_em ?? undefined,
-      decididoPorId: row.decidido_por_id ?? undefined,
+      decididoPorId: row.decidido_por_id ? SupervisorId.from(row.decidido_por_id).unwrap() : undefined,
       decididoEm: row.decidido_em ?? undefined,
       motivo: row.motivo ?? undefined,
     },
-    row.id,
-  ).getValue();
+    SolicitacaoTrocaTurnoId.from(row.id).unwrap(),
+  ).unwrap();
 }
 
-export class PgSolicitacaoTrocaTurnoRepository extends SolicitacaoTrocaTurnoRepository {
-  constructor(private readonly pool: Db) {
-    super();
-  }
+// Ids são objetos: para o SQL vai sempre o `.value`. Sem delete: solicitações são encerradas por
+// transição, para manter o histórico (a port do shift-swap não tem delete).
+export class PgSolicitacaoTrocaTurnoRepository implements SolicitacaoTrocaTurnoRepository {
+  constructor(private readonly pool: Db) {}
 
-  async save(entity: SolicitacaoTrocaTurno): Promise<void> {
+  async create(entity: SolicitacaoTrocaTurno): Promise<void> {
     await this.pool.query(
       `INSERT INTO solicitacao_troca_turno
          (id, turno_id, solicitante_id, destinatario_id, status, respondida_em,
           decidido_por_id, decidido_em, motivo)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
       [
-        entity.id,
-        entity.turno.id,
-        entity.solicitanteId,
-        entity.destinatarioId,
+        entity.id.value,
+        entity.turno.id.value,
+        entity.solicitanteId.value,
+        entity.destinatarioId.value,
         entity.status,
         entity.respondidaEm ?? null,
-        entity.decididoPorId ?? null,
+        entity.decididoPorId?.value ?? null,
         entity.decididoEm ?? null,
         entity.motivo ?? null,
       ],
@@ -89,22 +96,20 @@ export class PgSolicitacaoTrocaTurnoRepository extends SolicitacaoTrocaTurnoRepo
        SET status = $2, respondida_em = $3, decidido_por_id = $4, decidido_em = $5, motivo = $6
        WHERE id = $1`,
       [
-        entity.id,
+        entity.id.value,
         entity.status,
         entity.respondidaEm ?? null,
-        entity.decididoPorId ?? null,
+        entity.decididoPorId?.value ?? null,
         entity.decididoEm ?? null,
         entity.motivo ?? null,
       ],
     );
   }
 
-  async delete(id: string): Promise<void> {
-    await this.pool.query(`DELETE FROM solicitacao_troca_turno WHERE id = $1`, [id]);
-  }
-
-  async findById(id: string): Promise<SolicitacaoTrocaTurno | null> {
-    const result = await this.pool.query<SolicitacaoRow>(`${SELECT_SOLICITACAO} WHERE s.id = $1`, [id]);
+  async findById(id: SolicitacaoTrocaTurnoId): Promise<SolicitacaoTrocaTurno | null> {
+    const result = await this.pool.query<SolicitacaoRow>(`${SELECT_SOLICITACAO} WHERE s.id = $1`, [
+      id.value,
+    ]);
     const row = result.rows[0];
     return row ? toEntity(row) : null;
   }
@@ -122,19 +127,19 @@ export class PgSolicitacaoTrocaTurnoRepository extends SolicitacaoTrocaTurnoRepo
     return result.rows.map(toEntity);
   }
 
-  async findEmAbertoByTurnoId(turnoId: string): Promise<SolicitacaoTrocaTurno[]> {
+  async findEmAbertoByTurnoId(turnoId: TurnoId): Promise<SolicitacaoTrocaTurno[]> {
     const result = await this.pool.query<SolicitacaoRow>(
       `${SELECT_SOLICITACAO}
        WHERE s.status IN ('pendente', 'aguardando_aprovacao') AND s.turno_id = $1`,
-      [turnoId],
+      [turnoId.value],
     );
     return result.rows.map(toEntity);
   }
 
-  async findPendentesByDestinatarioId(destinatarioId: string): Promise<SolicitacaoTrocaTurno[]> {
+  async findPendentesByDestinatarioId(destinatarioId: FuncionarioId): Promise<SolicitacaoTrocaTurno[]> {
     const result = await this.pool.query<SolicitacaoRow>(
       `${SELECT_SOLICITACAO} WHERE s.status = 'pendente' AND s.destinatario_id = $1`,
-      [destinatarioId],
+      [destinatarioId.value],
     );
     return result.rows.map(toEntity);
   }
