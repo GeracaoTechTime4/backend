@@ -1,3 +1,4 @@
+import { systemClock } from "core-kernel";
 import {
   AceitarTrocaTurnoUseCase,
   AprovarTrocaTurnoUseCase,
@@ -43,10 +44,16 @@ export const solicitarTrocaTurno = new SolicitarTrocaTurnoUseCase(
   funcionarioRepository,
   solicitacaoRepository,
 );
-export const aceitarTrocaTurno = new AceitarTrocaTurnoUseCase(turnoRepository, solicitacaoRepository);
-export const recusarTrocaTurno = new RecusarTrocaTurnoUseCase(solicitacaoRepository);
-export const aprovarTrocaTurno = new AprovarTrocaTurnoUseCase(supervisorRepository, turnoRepository, solicitacaoRepository);
-export const rejeitarTrocaTurno = new RejeitarTrocaTurnoUseCase(supervisorRepository, solicitacaoRepository);
+// Use cases que registram data (resposta, decisão) recebem o relógio do sistema.
+export const aceitarTrocaTurno = new AceitarTrocaTurnoUseCase(turnoRepository, solicitacaoRepository, systemClock);
+export const recusarTrocaTurno = new RecusarTrocaTurnoUseCase(solicitacaoRepository, systemClock);
+export const aprovarTrocaTurno = new AprovarTrocaTurnoUseCase(
+  supervisorRepository,
+  turnoRepository,
+  solicitacaoRepository,
+  systemClock,
+);
+export const rejeitarTrocaTurno = new RejeitarTrocaTurnoUseCase(supervisorRepository, solicitacaoRepository, systemClock);
 export const cancelarTrocaTurno = new CancelarTrocaTurnoUseCase(solicitacaoRepository);
 export const expirarSolicitacoesTrocaTurno = new ExpirarSolicitacoesTrocaTurnoUseCase(solicitacaoRepository);
 export const listarSolicitacoesTrocaTurno = new ListarSolicitacoesTrocaTurnoUseCase(solicitacaoRepository);

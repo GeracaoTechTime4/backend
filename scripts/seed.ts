@@ -53,10 +53,10 @@ const turnosSeed = [
 
 for (const turno of turnosSeed) {
   const result = await criarTurno.execute({ ...turno, supervisorId });
-  if (result.isFailure) {
-    console.error(`  falha ao criar turno (${turno.data} ${turno.horaInicio}-${turno.horaFim}): ${result.error}`);
+  if (result.isFail()) {
+    console.error(`  falha ao criar turno (${turno.data} ${turno.horaInicio}-${turno.horaFim}): ${result.error.message}`);
   } else {
-    console.log(`  turno criado: ${result.getValue().id} (${turno.data} ${turno.horaInicio}-${turno.horaFim})`);
+    console.log(`  turno criado: ${result.value.id.value} (${turno.data} ${turno.horaInicio}-${turno.horaFim})`);
   }
 }
 

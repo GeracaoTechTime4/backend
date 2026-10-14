@@ -1,43 +1,38 @@
-import { SupervisorEntity, SupervisorRepository } from "shift-swap";
+import { EmailVO, NameVO, SupervisorEntity, SupervisorId, type SupervisorRepository } from "shift-swap";
 import type { Db } from "../db";
 
-export class PgSupervisorRepository extends SupervisorRepository {
-  constructor(private readonly pool: Db) {
-    super();
+interface PessoaRow {
+  id: string;
+  name: string;
+  email: string;
+}
+
+// Ver comentário em funcionario.repository.ts.
+function toEntity(row: PessoaRow): SupervisorEntity {
+  return SupervisorEntity.reconstituir(
+    { name: NameVO.create(row.name).unwrap(), email: EmailVO.create(row.email).unwrap() },
+    SupervisorId.from(row.id).unwrap(),
+  );
+}
+
+// A port do shift-swap só exige create e findById; update/delete/findAll não eram usados.
+export class PgSupervisorRepository implements SupervisorRepository {
+  constructor(private readonly pool: Db) {}
+
+  async create(entity: SupervisorEntity): Promise<void> {
+    await this.pool.query(`INSERT INTO supervisor (id, name, email) VALUES ($1, $2, $3)`, [
+      entity.id.value,
+      entity.name.value,
+      entity.email.value,
+    ]);
   }
 
-  async save(entity: SupervisorEntity): Promise<void> {
-    await this.pool.query(
-      `INSERT INTO supervisor (id, name, email) VALUES ($1, $2, $3)`,
-      [entity.id, entity.name.value, entity.email.value],
-    );
-  }
-
-  async update(entity: SupervisorEntity): Promise<void> {
-    await this.pool.query(
-      `UPDATE supervisor SET name = $2, email = $3 WHERE id = $1`,
-      [entity.id, entity.name.value, entity.email.value],
-    );
-  }
-
-  async delete(id: string): Promise<void> {
-    await this.pool.query(`DELETE FROM supervisor WHERE id = $1`, [id]);
-  }
-
-  async findById(id: string): Promise<SupervisorEntity | null> {
-    const result = await this.pool.query(
+  async findById(id: SupervisorId): Promise<SupervisorEntity | null> {
+    const result = await this.pool.query<PessoaRow>(
       `SELECT id, name, email FROM supervisor WHERE id = $1`,
-      [id],
+      [id.value],
     );
     const row = result.rows[0];
-    if (!row) return null;
-    return SupervisorEntity.create({ name: row.name, email: row.email }, row.id).getValue();
-  }
-
-  async findAll(): Promise<SupervisorEntity[]> {
-    const result = await this.pool.query(`SELECT id, name, email FROM supervisor`);
-    return result.rows.map((row) =>
-      SupervisorEntity.create({ name: row.name, email: row.email }, row.id).getValue(),
-    );
+    return row ? toEntity(row) : null;
   }
 }

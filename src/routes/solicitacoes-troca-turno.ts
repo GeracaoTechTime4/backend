@@ -15,6 +15,7 @@ import {
   solicitarTrocaTurno,
 } from "../lib/shift-swap";
 import { toSolicitacaoTrocaTurnoDTO } from "../lib/shift-swap/dto";
+import { respostaDeErro } from "../lib/shift-swap/http";
 
 const STATUS_VALIDOS: StatusSolicitacaoTrocaTurno[] = [
   "pendente",
@@ -25,21 +26,6 @@ const STATUS_VALIDOS: StatusSolicitacaoTrocaTurno[] = [
   "cancelada",
   "expirada",
 ];
-
-// O domínio devolve só mensagens de erro (Result<string>), então o status HTTP é inferido delas.
-function statusDoErro(error: unknown): 400 | 403 | 404 | 409 {
-  const mensagem = String(error);
-  if (mensagem.includes("não encontrad")) return 404;
-  if (mensagem.startsWith("Somente o")) return 403;
-  if (
-    mensagem.startsWith("Não é possível") ||
-    mensagem.includes("em aberto") ||
-    mensagem.includes("já possui")
-  ) {
-    return 409;
-  }
-  return 400;
-}
 
 async function lerBody<T>(c: Context): Promise<T | null> {
   try {
@@ -63,8 +49,8 @@ async function lerBodyOpcional<T extends object>(c: Context): Promise<T | null> 
 // id -> nome de todos os funcionários, para a resposta já trazer quem pediu e quem recebeu.
 async function nomesDosFuncionarios(): Promise<Map<string, string>> {
   const result = await listarFuncionarios.execute();
-  const funcionarios = result.isSuccess ? result.getValue() : [];
-  return new Map(funcionarios.map((funcionario) => [funcionario.id, funcionario.name.value]));
+  const funcionarios = result.ok ? result.value : [];
+  return new Map(funcionarios.map((funcionario) => [funcionario.id.value, funcionario.name.value]));
 }
 
 export const solicitacoesTrocaTurno = new Hono<Env>();
@@ -89,36 +75,36 @@ solicitacoesTrocaTurno.post("/", requireEmployee, async (c) => {
     destinatarioId: body.destinatarioId,
   });
 
-  if (result.isFailure) {
-    return c.json({ error: result.error }, statusDoErro(result.error));
+  if (result.isFail()) {
+    return respostaDeErro(c, result.error);
   }
 
-  return c.json({ solicitacao: toSolicitacaoTrocaTurnoDTO(result.getValue(), await nomesDosFuncionarios()) }, 201);
+  return c.json({ solicitacao: toSolicitacaoTrocaTurnoDTO(result.value, await nomesDosFuncionarios()) }, 201);
 });
 
 // Funcionário B: pedidos de troca endereçados a ele que ainda esperam a resposta dele.
 solicitacoesTrocaTurno.get("/recebidas", requireEmployee, async (c) => {
   const result = await listarSolicitacoesRecebidas.execute({ funcionarioId: c.get("session").user.id });
 
-  if (result.isFailure) {
-    return c.json({ error: result.error }, 500);
+  if (result.isFail()) {
+    return respostaDeErro(c, result.error);
   }
 
   const nomes = await nomesDosFuncionarios();
 
-  return c.json({ solicitacoes: result.getValue().map((s) => toSolicitacaoTrocaTurnoDTO(s, nomes)) });
+  return c.json({ solicitacoes: result.value.map((s) => toSolicitacaoTrocaTurnoDTO(s, nomes)) });
 });
 
 // Funcionário A: pedidos que ele fez, em qualquer status (para acompanhar a resposta).
 solicitacoesTrocaTurno.get("/enviadas", requireEmployee, async (c) => {
   const result = await listarSolicitacoesTrocaTurno.execute();
 
-  if (result.isFailure) {
-    return c.json({ error: result.error }, 500);
+  if (result.isFail()) {
+    return respostaDeErro(c, result.error);
   }
 
   const meuId = c.get("session").user.id;
-  const enviadas = result.getValue().filter((solicitacao) => solicitacao.solicitanteId === meuId);
+  const enviadas = result.value.filter((solicitacao) => solicitacao.solicitanteId.value === meuId);
   const nomes = await nomesDosFuncionarios();
 
   return c.json({ solicitacoes: enviadas.map((s) => toSolicitacaoTrocaTurnoDTO(s, nomes)) });
@@ -134,11 +120,11 @@ solicitacoesTrocaTurno.get("/", requireSupervisor, async (c) => {
 
   const result = await listarSolicitacoesTrocaTurno.execute();
 
-  if (result.isFailure) {
-    return c.json({ error: result.error }, 500);
+  if (result.isFail()) {
+    return respostaDeErro(c, result.error);
   }
 
-  const solicitacoes = result.getValue().filter((solicitacao) => !status || solicitacao.status === status);
+  const solicitacoes = result.value.filter((solicitacao) => !status || solicitacao.status === status);
 
   const nomes = await nomesDosFuncionarios();
 
@@ -150,13 +136,14 @@ solicitacoesTrocaTurno.get("/:id", async (c) => {
   const session = c.get("session");
   const result = await buscarSolicitacaoTrocaTurnoPorId.execute({ id: c.req.param("id") });
 
-  if (result.isFailure) {
-    return c.json({ error: result.error }, statusDoErro(result.error));
+  if (result.isFail()) {
+    return respostaDeErro(c, result.error);
   }
 
-  const solicitacao = result.getValue();
+  const solicitacao = result.value;
   const ehSupervisor = session.user.role === "SUPERVISOR";
-  const ehParte = solicitacao.solicitanteId === session.user.id || solicitacao.destinatarioId === session.user.id;
+  const ehParte =
+    solicitacao.solicitanteId.value === session.user.id || solicitacao.destinatarioId.value === session.user.id;
 
   if (!ehSupervisor && !ehParte) {
     return c.json({ error: "Forbidden" }, 403);
@@ -172,11 +159,11 @@ solicitacoesTrocaTurno.post("/:id/aceitar", requireEmployee, async (c) => {
     funcionarioId: c.get("session").user.id,
   });
 
-  if (result.isFailure) {
-    return c.json({ error: result.error }, statusDoErro(result.error));
+  if (result.isFail()) {
+    return respostaDeErro(c, result.error);
   }
 
-  return c.json({ solicitacao: toSolicitacaoTrocaTurnoDTO(result.getValue(), await nomesDosFuncionarios()) });
+  return c.json({ solicitacao: toSolicitacaoTrocaTurnoDTO(result.value, await nomesDosFuncionarios()) });
 });
 
 // Funcionário B recusa (motivo opcional): a solicitação é encerrada como "recusada".
@@ -193,11 +180,11 @@ solicitacoesTrocaTurno.post("/:id/recusar", requireEmployee, async (c) => {
     motivo: body.motivo,
   });
 
-  if (result.isFailure) {
-    return c.json({ error: result.error }, statusDoErro(result.error));
+  if (result.isFail()) {
+    return respostaDeErro(c, result.error);
   }
 
-  return c.json({ solicitacao: toSolicitacaoTrocaTurnoDTO(result.getValue(), await nomesDosFuncionarios()) });
+  return c.json({ solicitacao: toSolicitacaoTrocaTurnoDTO(result.value, await nomesDosFuncionarios()) });
 });
 
 // Supervisor autoriza uma troca que o destinatário já aceitou; o turno passa para ele.
@@ -207,11 +194,11 @@ solicitacoesTrocaTurno.post("/:id/aprovar", requireSupervisor, async (c) => {
     supervisorId: c.get("session").user.id,
   });
 
-  if (result.isFailure) {
-    return c.json({ error: result.error }, statusDoErro(result.error));
+  if (result.isFail()) {
+    return respostaDeErro(c, result.error);
   }
 
-  return c.json({ solicitacao: toSolicitacaoTrocaTurnoDTO(result.getValue(), await nomesDosFuncionarios()) });
+  return c.json({ solicitacao: toSolicitacaoTrocaTurnoDTO(result.value, await nomesDosFuncionarios()) });
 });
 
 solicitacoesTrocaTurno.post("/:id/rejeitar", requireSupervisor, async (c) => {
@@ -230,11 +217,11 @@ solicitacoesTrocaTurno.post("/:id/rejeitar", requireSupervisor, async (c) => {
     motivo: body.motivo,
   });
 
-  if (result.isFailure) {
-    return c.json({ error: result.error }, statusDoErro(result.error));
+  if (result.isFail()) {
+    return respostaDeErro(c, result.error);
   }
 
-  return c.json({ solicitacao: toSolicitacaoTrocaTurnoDTO(result.getValue(), await nomesDosFuncionarios()) });
+  return c.json({ solicitacao: toSolicitacaoTrocaTurnoDTO(result.value, await nomesDosFuncionarios()) });
 });
 
 // Funcionário A cancela a própria solicitação enquanto não houver desfecho
@@ -245,9 +232,9 @@ solicitacoesTrocaTurno.post("/:id/cancelar", requireEmployee, async (c) => {
     solicitanteId: c.get("session").user.id,
   });
 
-  if (result.isFailure) {
-    return c.json({ error: result.error }, statusDoErro(result.error));
+  if (result.isFail()) {
+    return respostaDeErro(c, result.error);
   }
 
-  return c.json({ solicitacao: toSolicitacaoTrocaTurnoDTO(result.getValue(), await nomesDosFuncionarios()) });
+  return c.json({ solicitacao: toSolicitacaoTrocaTurnoDTO(result.value, await nomesDosFuncionarios()) });
 });
