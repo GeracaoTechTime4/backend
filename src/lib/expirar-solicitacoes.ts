@@ -13,21 +13,19 @@ function referenciaAgora(agora = new Date()): string {
   return `${data}T${pad(agora.getHours())}:${pad(agora.getMinutes())}`;
 }
 
+// Sem try/catch: `execute()` nunca rejeita. Falha de banco chega como `UnexpectedError`, com a
+// exceção original em `error.cause`.
 async function expirar(): Promise<void> {
-  try {
-    const result = await expirarSolicitacoesTrocaTurno.execute({ referencia: referenciaAgora() });
+  const result = await expirarSolicitacoesTrocaTurno.execute({ referencia: referenciaAgora() });
 
-    if (result.isFail()) {
-      console.error("Falha ao expirar solicitações de troca:", result.error.message, result.error.cause ?? "");
-      return;
-    }
+  if (result.isFail()) {
+    console.error("Falha ao expirar solicitações de troca:", result.error.message, result.error.cause ?? "");
+    return;
+  }
 
-    const expiradas = result.value.length;
-    if (expiradas > 0) {
-      console.log(`${expiradas} solicitação(ões) de troca expirada(s)`);
-    }
-  } catch (error) {
-    console.error("Erro ao expirar solicitações de troca:", error);
+  const expiradas = result.value.length;
+  if (expiradas > 0) {
+    console.log(`${expiradas} solicitação(ões) de troca expirada(s)`);
   }
 }
 
