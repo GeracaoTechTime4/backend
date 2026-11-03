@@ -92,11 +92,43 @@ O `bun run build` gera um bundle único em `deploy/index.js` a partir de [src/la
 
    Na revisão, defina as variáveis não secretas: `SSM_PREFIX=/shift-swap-api/`, `BETTER_AUTH_URL=https://<domínio do endpoint>`, `CORS_ORIGIN=<url do front>`, `APP_TZ=America/Sao_Paulo` e `CROSS_SITE_COOKIES=true` se o front estiver em outro site. Dê à role criada (`awscli-lambdaweb-shift-swap-api`) `ssm:GetParameters` em `arn:aws:ssm:<região>:<conta>:parameter/shift-swap-api/*`.
 
-4. **Próximos deploys:** `bun run deploy`.
+4. **Próximos deploys:** automáticos pelo GitHub Actions a cada push na `main` (veja "CI/CD" abaixo). Manualmente: `AWS_PROFILE=mario bun run deploy`.
 
 5. **Teste:** `curl https://<domínio do endpoint>/health` e depois uma rota autenticada. Uma revisão que falha ao iniciar também fica `Active`.
 
 Para limitar custos: defina `scalingConfig.maxEnvironments` e `throttleConfig.rateLimit` no endpoint, retenção curta nos logs do CloudWatch e um alerta no AWS Budgets.
+
+## CI/CD (GitHub Actions)
+
+O workflow [.github/workflows/ci-cd.yml](.github/workflows/ci-cd.yml) roda em todo PR e em todo push na `main`:
+
+- **CI (todo PR e push):** `tsc --noEmit`, `bun run build` e um smoke test do bundle no Node 24 contra um Postgres de verdade (migrations, `/health` 200, rota protegida 401).
+- **Deploy (só push na `main`):** envia o bundle ao S3, cria uma nova revisão da Web Function copiando a configuração da que está no ar (role, variáveis, timeout, logs) e trocando só o código, espera ela assumir 100% do tráfego e testa `https://dkrzib6ua831y.cloudfront.net/api/health`.
+
+O GitHub acessa a AWS por OIDC, sem chaves guardadas. A role `github-actions-shift-swap-backend` só pode ser assumida pela `main` deste repositório e só cria revisões desta função. Para criar ou atualizar as roles (backend e frontend):
+
+```bash
+aws cloudformation deploy --profile mario --region us-east-1 \
+  --stack-name shift-swap-github-actions \
+  --template-file infra/github-actions-roles.yaml \
+  --capabilities CAPABILITY_NAMED_IAM
+```
+
+**Migrations no deploy (opcional):** crie o secret `MIGRATIONS_DATABASE_URL` com a URL **direta** do Neon e o deploy roda `bun run migrate` antes de publicar:
+
+```bash
+gh secret set MIGRATIONS_DATABASE_URL < <(sed -n 's/^DATABASE_URL=//p' .env.production.local)
+```
+
+**Rollback:** o log do passo "Criar revisão" mostra a revisão anterior. Para voltar o tráfego para ela:
+
+```bash
+aws lambda-web update-web-function-endpoint --profile mario --region us-east-1 \
+  --function-name shift-swap-api --endpoint-name default \
+  --endpoint-config '{"autoDeploymentMode":"Disabled","revisionWeights":[{"revisionId":"<revisão anterior>","weight":100}]}'
+```
+
+Com o endpoint em `Disabled`, novas revisões não assumem o tráfego sozinhas; depois de corrigir, volte para `{"autoDeploymentMode":"LatestRevision"}`.
 
 ## Endpoints
 
