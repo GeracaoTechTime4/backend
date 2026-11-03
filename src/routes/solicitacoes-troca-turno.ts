@@ -1,6 +1,7 @@
 import type { StatusSolicitacaoTrocaTurno } from "shift-swap";
 import { Hono } from "hono";
 import type { Context } from "hono";
+import { expirarSolicitacoesPendentes } from "../lib/expirar-solicitacoes";
 import { type Env, requireAuth, requireEmployee, requireSupervisor } from "../lib/session-middleware";
 import {
   aceitarTrocaTurno,
@@ -56,6 +57,12 @@ async function nomesDosFuncionarios(): Promise<Map<string, string>> {
 export const solicitacoesTrocaTurno = new Hono<Env>();
 
 solicitacoesTrocaTurno.use("*", requireAuth);
+
+// Antes de ler ou agir sobre solicitações, expira as que já passaram do início do turno.
+solicitacoesTrocaTurno.use("*", async (_c, next) => {
+  await expirarSolicitacoesPendentes();
+  await next();
+});
 
 // Funcionário A: pede a troca de um turno seu a um colega B. O solicitante é sempre quem
 // está logado. A solicitação nasce "pendente", aguardando a resposta de B.

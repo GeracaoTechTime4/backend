@@ -14,6 +14,11 @@ export interface Db {
 const url = process.env.DATABASE_URL;
 const usaPglite = !url || url.startsWith("pglite:");
 
+// Em produção (Lambda) o disco é efêmero e cada ambiente teria seu próprio PGlite: exige Postgres.
+if (usaPglite && process.env.NODE_ENV === "production") {
+  throw new Error("DATABASE_URL precisa apontar para um Postgres (postgresql://...) em produção");
+}
+
 async function criarPglite() {
   const { PGlite } = await import("@electric-sql/pglite");
   const { PostgresDialect } = await import("kysely");
@@ -74,7 +79,13 @@ async function criarPglite() {
 }
 
 function criarPostgres() {
-  const pg = new Pool({ connectionString: url });
+  // Várias instâncias da função abrem pools próprios: mantenha cada um pequeno para não
+  // estourar o limite de conexões do banco (use a URL "pooled" do Neon/Supabase).
+  const pg = new Pool({
+    connectionString: url,
+    max: Number(process.env.PG_POOL_MAX ?? 5),
+    idleTimeoutMillis: 30_000,
+  });
   const db: Db = {
     async query<R>(sql: string, params?: unknown[]) {
       const result = await pg.query(sql, params);

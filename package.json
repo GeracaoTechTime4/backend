@@ -10,7 +10,11 @@
     "migrate:auth": "bun run scripts/migrate-auth.ts",
     "db:migrate": "bun run scripts/migrate-domain.ts",
     "migrate": "bun run migrate:auth && bun run db:migrate",
-    "seed": "bun run scripts/seed.ts"
+    "migrate:prod": "bun --env-file=.env.production.local run migrate",
+    "seed": "bun run scripts/seed.ts",
+    "build": "bun build src/lambda.ts --target=node --format=esm --define 'process.env.NODE_ENV=\"production\"' --outfile=deploy/index.js --external @electric-sql/pglite --external pg-native && echo '{\"type\":\"module\"}' > deploy/package.json",
+    "start:node": "node deploy/index.js",
+    "deploy": "bun run build && aws lambda-web deploy --name shift-swap-api --code deploy --bucket-name shift-swap-api-web-666600766236 --region us-east-1"
   },
   "devDependencies": {
     "@better-auth/cli": "^1.4.21",
@@ -22,6 +26,8 @@
     "typescript": "^7"
   },
   "dependencies": {
+    "@aws-sdk/client-ssm": "^3.1161.0",
+    "@hono/node-server": "^2.1.6",
     "better-auth": "^1.7.6",
     "core-kernel": "^0.2.0",
     "hono": "^4.13.9",

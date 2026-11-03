@@ -64,6 +64,40 @@ O container da API roda as migrations (Better Auth + domínio) automaticamente a
 docker compose exec api bun run seed
 ```
 
+## Deploy na AWS (Lambda Web Functions)
+
+Em produção a API roda no [AWS Lambda Web Functions](https://docs.aws.amazon.com/lambda/) (Node.js 24, escala a zero, cobra só CPU ativo) com um Postgres gerenciado gratuito fora da AWS (Neon ou Supabase) acessado por TLS. Sem VPC nem NAT Gateway, o custo fica perto de zero com pouco tráfego.
+
+O `bun run build` gera um bundle único em `deploy/index.js` a partir de [src/lambda.ts](src/lambda.ts), que carrega `DATABASE_URL` e `BETTER_AUTH_SECRET` do SSM Parameter Store (quando `SSM_PREFIX` está definido) e então importa a API. Localmente o Bun continua sendo usado para `dev`, `migrate` e `seed`. O bundle sempre roda como produção: sem um `DATABASE_URL` Postgres ele não sobe (o PGlite não serve no Lambda, porque o disco é efêmero e cada instância teria o seu).
+
+1. **Banco:** crie um projeto no Neon/Supabase e rode as migrations da sua máquina com a URL **direta**:
+
+   ```bash
+   DATABASE_URL='postgresql://...?sslmode=require' bun run migrate
+   ```
+
+2. **Segredos** (SecureString no Parameter Store, gratuito). Para a API use a URL **pooled** do Neon/Supabase:
+
+   ```bash
+   aws ssm put-parameter --type SecureString --name /shift-swap-api/DATABASE_URL --value 'postgresql://...pooler...?sslmode=require'
+   aws ssm put-parameter --type SecureString --name /shift-swap-api/BETTER_AUTH_SECRET --value "$(openssl rand -base64 32)"
+   ```
+
+3. **Primeiro deploy** (precisa de um AWS CLI recente, com `aws lambda-web help` disponível). O endpoint é público (`ApplicationManaged`): a autenticação é feita pelo Better Auth.
+
+   ```bash
+   bun run build
+   aws lambda-web deploy --name shift-swap-api --code deploy --create --auth-type ApplicationManaged
+   ```
+
+   Na revisão, defina as variáveis não secretas: `SSM_PREFIX=/shift-swap-api/`, `BETTER_AUTH_URL=https://<domínio do endpoint>`, `CORS_ORIGIN=<url do front>`, `APP_TZ=America/Sao_Paulo` e `CROSS_SITE_COOKIES=true` se o front estiver em outro site. Dê à role criada (`awscli-lambdaweb-shift-swap-api`) `ssm:GetParameters` em `arn:aws:ssm:<região>:<conta>:parameter/shift-swap-api/*`.
+
+4. **Próximos deploys:** `bun run deploy`.
+
+5. **Teste:** `curl https://<domínio do endpoint>/health` e depois uma rota autenticada. Uma revisão que falha ao iniciar também fica `Active`.
+
+Para limitar custos: defina `scalingConfig.maxEnvironments` e `throttleConfig.rateLimit` no endpoint, retenção curta nos logs do CloudWatch e um alerta no AWS Budgets.
+
 ## Endpoints
 
 - `GET /health` — health-check, retorna `{ status: "ok", timestamp }`.
@@ -103,7 +137,7 @@ Toda solicitação na resposta traz `solicitanteNome` e `destinatarioNome`. `apr
 - `POST /solicitacoes-troca/:id/aprovar` — `SUPERVISOR`, sem corpo. Só em `aguardando_aprovacao`; reatribui o turno ao destinatário (409 se a agenda dele mudou e agora conflita).
 - `POST /solicitacoes-troca/:id/rejeitar` — `SUPERVISOR`. Corpo: `{ motivo }` (obrigatório). Só em `aguardando_aprovacao`.
 
-**Expiração:** ao subir, a API roda a cada 60 s o `ExpirarSolicitacoesTrocaTurnoUseCase`, que expira as solicitações em aberto (`pendente` ou `aguardando_aprovacao`) cujo turno já começou. Os turnos são guardados sem fuso, então defina `TZ` no ambiente (ex.: `TZ=America/Sao_Paulo`); o `docker-compose.yml` já usa esse padrão.
+**Expiração:** antes de cada rota de `/solicitacoes-troca`, a API roda o `ExpirarSolicitacoesTrocaTurnoUseCase` (no máximo uma vez por minuto por instância), que expira as solicitações em aberto (`pendente` ou `aguardando_aprovacao`) cujo turno já começou. É sob demanda, e não um timer, porque no Lambda não há processo de longa duração. Os turnos são guardados sem fuso; o fuso de referência vem de `APP_TZ` (padrão `America/Sao_Paulo`), independente do `TZ` do processo.
 
 **Banco:** `bun run db:migrate` também migra bancos criados antes do aceite do destinatário (coluna `respondida_em`, novos status e `destinatario_id` obrigatório). Pedidos pendentes do modelo antigo, que não tinham destinatário, são cancelados.
 

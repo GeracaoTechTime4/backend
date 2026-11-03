@@ -1,7 +1,8 @@
+import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { secureHeaders } from "hono/secure-headers";
 import { auth } from "./lib/auth";
-import { iniciarExpiracaoDeSolicitacoes } from "./lib/expirar-solicitacoes";
 import { requireAuth, requireEmployee, requireSupervisor } from "./lib/session-middleware";
 import {
   atualizarTurno,
@@ -15,7 +16,12 @@ import { toColegaDTO, toFuncionarioDTO, toTurnoDTO } from "./lib/shift-swap/dto"
 import { codigoPostgres, respostaDeErro } from "./lib/shift-swap/http";
 import { solicitacoesTrocaTurno } from "./routes/solicitacoes-troca-turno";
 
-const port = Number(process.env.PORT ?? 3000);
+// No Lambda Web Functions o runtime informa host:porta em AWS_LAMBDA_HTTP_ENDPOINT e sonda
+// exatamente esse endereço; localmente vale PORT (padrão 3000).
+const [hostname = "0.0.0.0", porta] = (
+  process.env.AWS_LAMBDA_HTTP_ENDPOINT ?? `0.0.0.0:${process.env.PORT ?? 3000}`
+).split(":");
+const port = Number(porta);
 
 const allowedOrigins = (process.env.CORS_ORIGIN ?? "http://localhost:5173")
   .split(",")
@@ -23,6 +29,8 @@ const allowedOrigins = (process.env.CORS_ORIGIN ?? "http://localhost:5173")
   .filter(Boolean);
 
 const app = new Hono();
+
+app.use("*", secureHeaders());
 
 app.use(
   "*",
@@ -188,11 +196,16 @@ app.get("/turnos/me", requireAuth, async (c) => {
 
 app.route("/solicitacoes-troca", solicitacoesTrocaTurno);
 
-iniciarExpiracaoDeSolicitacoes();
-
-console.log(`shift-swap-api listening on port ${port}`);
+// No Bun (dev, `bun --hot`) o export default abaixo sobe o servidor e permite hot reload;
+// no Node (Lambda Web Functions) quem sobe é o @hono/node-server.
+if (!process.versions.bun) {
+  serve({ fetch: app.fetch, hostname, port }, () => {
+    console.log(`shift-swap-api listening on ${hostname}:${port}`);
+  });
+}
 
 export default {
+  hostname,
   port,
   fetch: app.fetch,
 };

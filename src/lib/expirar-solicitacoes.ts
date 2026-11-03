@@ -1,21 +1,31 @@
 import { expirarSolicitacoesTrocaTurno } from "./shift-swap";
 
-const INTERVALO_MS = 60_000;
+// Os turnos são guardados sem fuso; o fuso de referência vem de APP_TZ e não do TZ do processo,
+// que no Lambda é definido pelo runtime (UTC).
+const FUSO = process.env.APP_TZ ?? "America/Sao_Paulo";
 
-function pad(n: number): string {
-  return String(n).padStart(2, "0");
-}
+// "sv-SE" formata como "YYYY-MM-DD HH:mm", o mesmo formato (com T) usado nos turnos.
+const formatador = new Intl.DateTimeFormat("sv-SE", {
+  timeZone: FUSO,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
 
-// Mesmo formato (YYYY-MM-DDTHH:mm) e mesmo fuso dos turnos, que são guardados sem fuso.
-// O fuso é o do processo: defina TZ no ambiente (ex.: America/Sao_Paulo).
 function referenciaAgora(agora = new Date()): string {
-  const data = `${agora.getFullYear()}-${pad(agora.getMonth() + 1)}-${pad(agora.getDate())}`;
-  return `${data}T${pad(agora.getHours())}:${pad(agora.getMinutes())}`;
+  return formatador.format(agora).replace(" ", "T");
 }
 
-async function expirar(): Promise<void> {
+// A referência tem resolução de minuto, então basta expirar uma vez por minuto em cada
+// ambiente. Guarda a execução em andamento para que requisições concorrentes aguardem a mesma.
+let ultima: { referencia: string; execucao: Promise<void> } | undefined;
+
+async function expirar(referencia: string): Promise<void> {
   try {
-    const result = await expirarSolicitacoesTrocaTurno.execute({ referencia: referenciaAgora() });
+    const result = await expirarSolicitacoesTrocaTurno.execute({ referencia });
 
     if (result.isFail()) {
       console.error("Falha ao expirar solicitações de troca:", result.error.message, result.error.cause ?? "");
@@ -31,7 +41,14 @@ async function expirar(): Promise<void> {
   }
 }
 
-export function iniciarExpiracaoDeSolicitacoes(): void {
-  void expirar();
-  setInterval(() => void expirar(), INTERVALO_MS);
+/**
+ * Expira as solicitações em aberto cujo turno já começou. Roda sob demanda (antes das rotas
+ * de solicitações), já que no Lambda não há processo de longa duração para um setInterval.
+ */
+export function expirarSolicitacoesPendentes(): Promise<void> {
+  const referencia = referenciaAgora();
+  if (ultima?.referencia !== referencia) {
+    ultima = { referencia, execucao: expirar(referencia) };
+  }
+  return ultima.execucao;
 }

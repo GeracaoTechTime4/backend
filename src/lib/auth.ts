@@ -12,6 +12,13 @@ export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET,
   baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
   trustedOrigins,
+  // Front em outro site (ex.: front na Vercel e API no domínio do Lambda): o navegador só envia o
+  // cookie de sessão em requisições cross-site com SameSite=None + Secure.
+  ...(process.env.CROSS_SITE_COOKIES === "true" && {
+    advanced: {
+      defaultCookieAttributes: { sameSite: "none", secure: true },
+    },
+  }),
   emailAndPassword: {
     enabled: true,
   },

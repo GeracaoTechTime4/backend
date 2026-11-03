@@ -35,3 +35,6 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # banco local (PGlite)
 .data
+
+# Bundle do Lambda Web Functions
+deploy/
