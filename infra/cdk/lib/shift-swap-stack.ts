@@ -56,6 +56,9 @@ export class ShiftSwapStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: ShiftSwapStackProps) {
     super(scope, id, props);
 
+    // Textos que vão para o template (descrições, código das CloudFront Functions) só em ASCII: o
+    // CloudFormation guarda acentos como "??", e o CDK passa a ver mudanças que não existem (o que
+    // também impede `cdk import`).
     const env = props.environment;
     const functionName = `shift-swap-api-${env.name}`;
     const ssmPrefix = `/shift-swap-api/${env.name}/`;
@@ -76,7 +79,7 @@ export class ShiftSwapStack extends cdk.Stack {
     const executionRole = new iam.Role(this, "ExecutionRole", {
       roleName: `${functionName}-web-role`,
       assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
-      description: `Execução da Web Function ${functionName}`,
+      description: `Execucao da Web Function ${functionName}`,
     });
     for (const group of logGroups) {
       group.grantWrite(executionRole);
@@ -125,7 +128,7 @@ export class ShiftSwapStack extends cdk.Stack {
     const bootstrapRevision = new lambda.CfnWebFunctionRevision(this, "BootstrapRevision", {
       // O ARN (e não o nome) cria a dependência: a revisão só é criada depois da função.
       functionName: webFunction.attrFunctionArn,
-      description: "bootstrap (503 até o primeiro deploy)",
+      description: "bootstrap (503 ate o primeiro deploy)",
       buildConfig: {
         codeConfig: { s3Object: { bucket: codeBucket.bucketName, key: cdk.Fn.join("", ["bootstrap/", cdk.Fn.select(0, bootstrapCode.objectKeys)]) } },
         runtimeConfig: { runtime: "nodejs24.x" },
@@ -144,7 +147,7 @@ export class ShiftSwapStack extends cdk.Stack {
     const liveRevision = new cdk.CfnParameter(this, "LiveRevision", {
       type: "AWS::SSM::Parameter::Value<String>",
       default: liveRevisionParam,
-      description: "Parâmetro do SSM com o ID da revisão no ar (gravado pelo pipeline)",
+      description: "Parametro do SSM com o ID da revisao no ar (gravado pelo pipeline)",
     });
     const isBootstrap = new cdk.CfnCondition(this, "IsBootstrap", {
       expression: cdk.Fn.conditionEquals(liveRevision.valueAsString, "bootstrap"),
