@@ -13,7 +13,7 @@
       "NODE_ENV": "production",
       "SSM_PREFIX": "/shift-swap-api/prod/",
       "BETTER_AUTH_URL": "https://so.mariochaves.click",
-      "CORS_ORIGIN": "https://so.mariochaves.click,https://d3g7kjb8dtlq9a.cloudfront.net",
+      "CORS_ORIGIN": "https://so.mariochaves.click",
       "CROSS_SITE_COOKIES": "false",
       "APP_TZ": "America/Sao_Paulo",
       "PG_POOL_MAX": "5"

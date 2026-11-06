@@ -21,13 +21,9 @@ const environments: ShiftSwapEnvironment[] = [
     name: "prod",
     githubEnvironment: "production",
     domainName: "so.mariochaves.click",
-    // Troca sem queda da distribuição antiga (E3QT1JW59DWN5A) para esta (ver infra/cdk/README.md):
-    // A) alias temporário so-prod (o update-domain-association exige certificado no destino);
-    // B) TXT _so + update-domain-association move so.mariochaves.click para esta distribuição;
-    // C) UPSERT dos registros de so.mariochaves.click e `cdk import` deles (id "Alias");
-    // D) remove o alias temporário e os registros dele.
-    aliases: ["so-prod.mariochaves.click"],
-    dnsRecords: [{ id: "TempAlias", name: "so-prod.mariochaves.click" }],
+    // Migrado da distribuição antiga (E3QT1JW59DWN5A) sem queda; o roteiro está em infra/cdk/README.md.
+    aliases: ["so.mariochaves.click"],
+    dnsRecords: [{ id: "Alias", name: "so.mariochaves.click" }],
     maxEnvironments: 2,
     rateLimit: 100,
   },
