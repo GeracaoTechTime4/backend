@@ -13,7 +13,7 @@
       "SSM_PREFIX": "/shift-swap-api/",
       "BETTER_AUTH_URL": "https://dkrzib6ua831y.cloudfront.net",
       "CORS_ORIGIN": "https://so.mariochaves.click,https://dkrzib6ua831y.cloudfront.net",
-      "CROSS_SITE_COOKIES": "true",
+      "CROSS_SITE_COOKIES": "false",
       "APP_TZ": "America/Sao_Paulo",
       "PG_POOL_MAX": "5"
     },
