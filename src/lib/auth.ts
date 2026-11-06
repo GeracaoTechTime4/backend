@@ -1,17 +1,13 @@
 import { betterAuth } from "better-auth";
 import { authDatabase } from "./db";
+import { allowedOrigins } from "./origins";
 import { criarFuncionario, criarSupervisor } from "./shift-swap";
-
-const trustedOrigins = (process.env.CORS_ORIGIN ?? "http://localhost:5173")
-  .split(",")
-  .map((origin) => origin.trim())
-  .filter(Boolean);
 
 export const auth = betterAuth({
   database: authDatabase,
   secret: process.env.BETTER_AUTH_SECRET,
   baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
-  trustedOrigins,
+  trustedOrigins: allowedOrigins,
   // Front em outro site (ex.: front na Vercel e API no domínio do Lambda): o navegador só envia o
   // cookie de sessão em requisições cross-site com SameSite=None + Secure.
   ...(process.env.CROSS_SITE_COOKIES === "true" && {
