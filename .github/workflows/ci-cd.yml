@@ -16,10 +16,8 @@ concurrency:
 env:
   AWS_REGION: us-east-1
   AWS_ROLE_ARN: arn:aws:iam::666600766236:role/github-actions-shift-swap-backend
-  FUNCTION_NAME: shift-swap-api
-  ENDPOINT_NAME: default
-  CODE_BUCKET: shift-swap-api-web-666600766236
-  PUBLIC_URL: https://dkrzib6ua831y.cloudfront.net
+  # Destino e configuração da revisão (variáveis de ambiente, role, timeout, logs) ficam versionados aqui.
+  DEPLOY_CONFIG: config/env/prod.json
 
 jobs:
   ci:
@@ -63,6 +61,26 @@ jobs:
           done
           curl -sf http://127.0.0.1:3000/health
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/turnos)" = "401"
+      # Sem DATABASE_URL/BETTER_AUTH_SECRET o bundle (sempre produção) não pode subir.
+      - name: Bundle recusa configuração inválida
+        run: |
+          if env -u DATABASE_URL -u BETTER_AUTH_SECRET node deploy/index.js > invalid.log 2>&1; then
+            echo "::error::O bundle subiu sem DATABASE_URL e BETTER_AUTH_SECRET" && exit 1
+          fi
+          grep -q "Configuração inválida" invalid.log && grep -q "DATABASE_URL" invalid.log && grep -q "BETTER_AUTH_SECRET" invalid.log
+
+      - name: Configuração dos ambientes
+        run: |
+          for f in config/env/*.json; do
+            jq -e '.functionName and .endpointName and .codeBucket and .publicUrl
+              and .serviceConfig.executionRoleArn
+              and .serviceConfig.environmentVariables.NODE_ENV == "production"
+              and .serviceConfig.environmentVariables.SSM_PREFIX
+              and .serviceConfig.environmentVariables.BETTER_AUTH_URL
+              and .serviceConfig.environmentVariables.CORS_ORIGIN' "$f" > /dev/null \
+              || { echo "::error file=$f::configuração incompleta"; exit 1; }
+          done
+
       - name: Log do servidor
         if: failure()
         run: cat server.log || true
@@ -94,6 +112,16 @@ jobs:
           name: lambda-bundle
           path: deploy/
 
+      - name: Ler a configuração do ambiente
+        run: |
+          {
+            echo "FUNCTION_NAME=$(jq -r .functionName "$DEPLOY_CONFIG")"
+            echo "ENDPOINT_NAME=$(jq -r .endpointName "$DEPLOY_CONFIG")"
+            echo "CODE_BUCKET=$(jq -r .codeBucket "$DEPLOY_CONFIG")"
+            echo "PUBLIC_URL=$(jq -r .publicUrl "$DEPLOY_CONFIG")"
+          } >> "$GITHUB_ENV"
+          jq .serviceConfig "$DEPLOY_CONFIG" > service-config.json
+
       - uses: oven-sh/setup-bun@v2
         if: env.MIGRATIONS_DATABASE_URL != ''
       - name: Migrations
@@ -123,7 +151,7 @@ jobs:
             --body function.zip --query VersionId --output text)
           echo "version_id=$VERSION_ID" >> "$GITHUB_OUTPUT"
 
-      # Copia a configuração (role, env vars, timeout, logs) da revisão que está no ar e troca só o código.
+      # A configuração (role, env vars, timeout, logs) vem de $DEPLOY_CONFIG, não da revisão anterior.
       - name: Criar revisão
         id: revision
         env:
@@ -133,9 +161,6 @@ jobs:
             --endpoint-name "$ENDPOINT_NAME" --query 'revisionWeights[0].revisionId' --output text)
           echo "Revisão atual: $CURRENT"
           echo "previous=$CURRENT" >> "$GITHUB_OUTPUT"
-
-          aws lambda-web get-web-function-revision --function-name "$FUNCTION_NAME" --revision-id "$CURRENT" \
-            --query serviceConfig --output json > service-config.json
 
           jq -n --arg b "$CODE_BUCKET" --arg k "$FUNCTION_NAME/function.zip" --arg v "$VERSION_ID" \
             '{codeConfig: {s3Object: {bucket: $b, key: $k, versionId: $v}}, runtimeConfig: {runtime: "nodejs24.x"}}' \

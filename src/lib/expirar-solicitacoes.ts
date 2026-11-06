@@ -1,8 +1,9 @@
+import { config } from "../config";
 import { expirarSolicitacoesTrocaTurno } from "./shift-swap";
 
 // Os turnos são guardados sem fuso; o fuso de referência vem de APP_TZ e não do TZ do processo,
 // que no Lambda é definido pelo runtime (UTC).
-const FUSO = process.env.APP_TZ ?? "America/Sao_Paulo";
+const FUSO = config.APP_TZ;
 
 // "sv-SE" formata como "YYYY-MM-DD HH:mm", o mesmo formato (com T) usado nos turnos.
 const formatador = new Intl.DateTimeFormat("sv-SE", {

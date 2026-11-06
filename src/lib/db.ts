@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { Pool } from "pg";
+import { config } from "../config";
 
 /** O que os repositórios usam do banco: serve tanto para o Postgres quanto para o PGlite. */
 export interface Db {
@@ -11,13 +12,9 @@ export interface Db {
 
 // Sem DATABASE_URL (ou com `pglite:<diretório>`), usa o PGlite: um Postgres embutido que
 // grava em disco e dispensa Docker. Com `postgresql://...`, usa o Postgres de verdade.
-const url = process.env.DATABASE_URL;
+// Em produção (Lambda) o disco é efêmero e cada ambiente teria seu próprio PGlite: src/config.ts exige Postgres.
+const url = config.DATABASE_URL;
 const usaPglite = !url || url.startsWith("pglite:");
-
-// Em produção (Lambda) o disco é efêmero e cada ambiente teria seu próprio PGlite: exige Postgres.
-if (usaPglite && process.env.NODE_ENV === "production") {
-  throw new Error("DATABASE_URL precisa apontar para um Postgres (postgresql://...) em produção");
-}
 
 async function criarPglite() {
   const { PGlite } = await import("@electric-sql/pglite");
@@ -83,7 +80,7 @@ function criarPostgres() {
   // estourar o limite de conexões do banco (use a URL "pooled" do Neon/Supabase).
   const pg = new Pool({
     connectionString: url,
-    max: Number(process.env.PG_POOL_MAX ?? 5),
+    max: config.PG_POOL_MAX,
     idleTimeoutMillis: 30_000,
   });
   const db: Db = {

@@ -1,5 +1,6 @@
 import { betterAuth } from "better-auth";
 import { haveIBeenPwned } from "better-auth/plugins";
+import { config } from "../config";
 import { CLIENT_IP_HEADER } from "./client-ip";
 import { authDatabase } from "./db";
 import { allowedOrigins } from "./origins";
@@ -7,21 +8,21 @@ import { criarFuncionario, criarSupervisor } from "./shift-swap";
 
 export const auth = betterAuth({
   database: authDatabase,
-  secret: process.env.BETTER_AUTH_SECRET,
-  baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
+  secret: config.BETTER_AUTH_SECRET,
+  baseURL: config.BETTER_AUTH_URL,
   trustedOrigins: allowedOrigins,
   advanced: {
     ipAddress: { ipAddressHeaders: [CLIENT_IP_HEADER] },
     // Front em outro site (ex.: front na Vercel e API no domínio do Lambda): o navegador só envia o
     // cookie de sessão em requisições cross-site com SameSite=None + Secure.
-    ...(process.env.CROSS_SITE_COOKIES === "true" && {
+    ...(config.CROSS_SITE_COOKIES && {
       defaultCookieAttributes: { sameSite: "none", secure: true },
     }),
   },
   // Limite de tentativas por IP. Fica no banco porque no Lambda cada instância tem a sua memória
   // e a perde no cold start. Ligado em produção; AUTH_RATE_LIMIT=true liga também localmente.
   rateLimit: {
-    enabled: process.env.NODE_ENV === "production" || process.env.AUTH_RATE_LIMIT === "true",
+    enabled: config.NODE_ENV === "production" || config.AUTH_RATE_LIMIT,
     storage: "database",
     customRules: {
       "/sign-in/email": { window: 60, max: 5 },
