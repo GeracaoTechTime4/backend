@@ -98,7 +98,9 @@ jobs:
         id: upload
         run: |
           (cd deploy && zip -qX ../function.zip index.js package.json)
-          echo "sha256 do zip: $(sha256sum function.zip | cut -d' ' -f1)"
+          # Hash do bundle (e não do zip, que grava a data dos arquivos): igual em staging e produção
+          # quando a promoção publica o mesmo artefato.
+          echo "sha256 do bundle (index.js): $(sha256sum deploy/index.js | cut -d' ' -f1)"
           VERSION_ID=$(aws s3api put-object --bucket "$CODE_BUCKET" --key "$FUNCTION_NAME/function.zip" \
             --body function.zip --query VersionId --output text)
           echo "version_id=$VERSION_ID" >> "$GITHUB_OUTPUT"
