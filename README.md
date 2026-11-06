@@ -98,6 +98,10 @@ O `bun run build` gera um bundle único em `deploy/index.js` a partir de [src/la
 
 Para limitar custos: defina `scalingConfig.maxEnvironments` e `throttleConfig.rateLimit` no endpoint, retenção curta nos logs do CloudWatch e um alerta no AWS Budgets.
 
+## Infra como código
+
+A infra dos ambientes novos (staging e, em seguida, a prod nova) é definida em AWS CDK: veja [infra/cdk/README.md](infra/cdk/README.md). Staging: `https://so-staging.mariochaves.click`.
+
 ## CI/CD (GitHub Actions)
 
 O workflow [.github/workflows/ci-cd.yml](.github/workflows/ci-cd.yml) roda em todo PR e em todo push na `main`:
@@ -134,7 +138,7 @@ gh secret set MIGRATIONS_DATABASE_URL < <(sed -n 's/^DATABASE_URL=//p' .env.prod
 ```bash
 aws lambda-web update-web-function-endpoint --profile mario --region us-east-1 \
   --function-name shift-swap-api --endpoint-name default \
-  --endpoint-config '{"autoDeploymentMode":"Disabled","revisionWeights":[{"revisionId":"<revisão anterior>","weight":100}]}'
+  --auto-deployment-mode Disabled --revision-weights revisionId=<revisão anterior>,weight=100
 ```
 
 Com o endpoint em `Disabled`, novas revisões não assumem o tráfego sozinhas; depois de corrigir, volte para `{"autoDeploymentMode":"LatestRevision"}`.
