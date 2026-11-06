@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
 import { auth } from "./lib/auth";
+import { allowedOrigins } from "./lib/origins";
 import { requireAuth, requireEmployee, requireSupervisor } from "./lib/session-middleware";
 import {
   atualizarTurno,
@@ -22,11 +23,6 @@ const [hostname = "0.0.0.0", porta] = (
   process.env.AWS_LAMBDA_HTTP_ENDPOINT ?? `0.0.0.0:${process.env.PORT ?? 3000}`
 ).split(":");
 const port = Number(porta);
-
-const allowedOrigins = (process.env.CORS_ORIGIN ?? "http://localhost:5173")
-  .split(",")
-  .map((origin) => origin.trim())
-  .filter(Boolean);
 
 const app = new Hono();
 

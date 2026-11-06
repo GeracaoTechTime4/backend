@@ -90,7 +90,7 @@ O `bun run build` gera um bundle único em `deploy/index.js` a partir de [src/la
    aws lambda-web deploy --name shift-swap-api --code deploy --create --auth-type ApplicationManaged
    ```
 
-   Na revisão, defina as variáveis não secretas: `SSM_PREFIX=/shift-swap-api/`, `BETTER_AUTH_URL=https://<domínio do endpoint>`, `CORS_ORIGIN=<url do front>`, `APP_TZ=America/Sao_Paulo` e `CROSS_SITE_COOKIES=true` se o front estiver em outro site. Dê à role criada (`awscli-lambdaweb-shift-swap-api`) `ssm:GetParameters` em `arn:aws:ssm:<região>:<conta>:parameter/shift-swap-api/*`.
+   Na revisão, defina as variáveis não secretas: `SSM_PREFIX=/shift-swap-api/`, `BETTER_AUTH_URL=https://<domínio do endpoint>`, `CORS_ORIGIN=<url do front>` (só se o front estiver fora dos domínios já aceitos em [src/lib/origins.ts](src/lib/origins.ts)), `APP_TZ=America/Sao_Paulo` e `CROSS_SITE_COOKIES=true` se o front estiver em outro site. Dê à role criada (`awscli-lambdaweb-shift-swap-api`) `ssm:GetParameters` em `arn:aws:ssm:<região>:<conta>:parameter/shift-swap-api/*`.
 
 4. **Próximos deploys:** automáticos pelo GitHub Actions a cada push na `main` (veja "CI/CD" abaixo). Manualmente: `AWS_PROFILE=mario bun run deploy`.
 
@@ -196,7 +196,7 @@ A tabela `turno` (schema em [src/db/schema.sql](src/db/schema.sql)) referencia `
 
 ## Integração com o frontend
 
-O frontend deve ser adicionado em `CORS_ORIGIN` (lista separada por vírgula) e usar `credentials: "include"` nas chamadas, já que a sessão é baseada em cookies. Como o campo `role` é uma extensão do schema padrão, o client do Better Auth no frontend precisa do plugin `inferAdditionalFields`:
+As origens do front ficam em [src/lib/origins.ts](src/lib/origins.ts) (`localhost:5173`, `dkrzib6ua831y.cloudfront.net` e `so.mariochaves.click`); outras podem ser acrescentadas em `CORS_ORIGIN` (lista separada por vírgula). O front deve usar `credentials: "include"` nas chamadas, já que a sessão é baseada em cookies. Como o campo `role` é uma extensão do schema padrão, o client do Better Auth no frontend precisa do plugin `inferAdditionalFields`:
 
 ```ts
 import { createAuthClient } from "better-auth/client";
