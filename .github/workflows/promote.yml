@@ -1,0 +1,76 @@
+name: Promover para produção
+
+# Publica em produção o bundle de uma execução do CI/CD da main que já foi para staging.
+# Rode em Actions → "Promover para produção" → Run workflow. Sem `run_id`, usa a execução mais
+# recente da main cujo deploy em staging deu certo. Só quem tem permissão de escrita no repositório
+# consegue rodar, e o Environment `production` só aceita a branch main.
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: ID da execução do CI/CD a promover (vazio = a mais recente que passou por staging)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: promote-production
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    name: Escolher a versão
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    outputs:
+      run_id: ${{ steps.pick.outputs.run_id }}
+      sha: ${{ steps.pick.outputs.sha }}
+    steps:
+      - name: Execução que passou por staging
+        id: pick
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.run_id }}
+        run: |
+          test "$GITHUB_REF" = "refs/heads/main" || { echo "::error::Rode a promoção a partir da main."; exit 1; }
+
+          if [ -z "$RUN_ID" ]; then
+            for id in $(gh run list -R "$GITHUB_REPOSITORY" --workflow ci-cd.yml --branch main --event push \
+                --status success --limit 20 --json databaseId -q '.[].databaseId'); do
+              if gh run view "$id" -R "$GITHUB_REPOSITORY" --json jobs \
+                  -q '.jobs[] | select(.name | startswith("Staging")) | .conclusion' | grep -qx success; then
+                RUN_ID=$id; break
+              fi
+            done
+            test -n "$RUN_ID" || { echo "::error::Nenhuma execução recente da main passou por staging."; exit 1; }
+          fi
+
+          INFO=$(gh run view "$RUN_ID" -R "$GITHUB_REPOSITORY" --json headBranch,headSha,event,workflowName,jobs)
+          test "$(jq -r .workflowName <<< "$INFO")" = "CI/CD" || { echo "::error::$RUN_ID não é do workflow CI/CD."; exit 1; }
+          test "$(jq -r .headBranch <<< "$INFO")" = "main" || { echo "::error::$RUN_ID não é da main."; exit 1; }
+          jq -e '.jobs[] | select(.name | startswith("Staging")) | select(.conclusion == "success")' <<< "$INFO" > /dev/null \
+            || { echo "::error::A execução $RUN_ID não publicou em staging com sucesso."; exit 1; }
+
+          SHA=$(jq -r .headSha <<< "$INFO")
+          echo "Promovendo a execução $RUN_ID (commit ${SHA::7})"
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+  production:
+    name: Produção
+    needs: resolve
+    permissions:
+      contents: read
+      id-token: write
+      actions: read
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: production
+      config: config/env/prod.json
+      run_id: ${{ needs.resolve.outputs.run_id }}
+      ref: ${{ needs.resolve.outputs.sha }}
+    secrets: inherit

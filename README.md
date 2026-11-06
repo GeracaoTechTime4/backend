@@ -104,11 +104,15 @@ A infra dos ambientes novos (staging e, em seguida, a prod nova) é definida em 
 
 ## CI/CD (GitHub Actions)
 
-O workflow [.github/workflows/ci-cd.yml](.github/workflows/ci-cd.yml) roda em todo PR e em todo push na `main`:
+| Gatilho | Workflow | O que roda |
+|---|---|---|
+| Todo PR e push | [ci-cd.yml](.github/workflows/ci-cd.yml) | `tsc --noEmit`, `bun run build`, smoke test do bundle no Node 24 contra um Postgres de verdade, bundle recusando configuração inválida e validação de `config/env/*.json` |
+| Push na `main` | [ci-cd.yml](.github/workflows/ci-cd.yml) → [deploy.yml](.github/workflows/deploy.yml) | Deploy em **staging** (`https://so-staging.mariochaves.click`) |
+| Manual: Actions → **"Promover para produção"** | [promote.yml](.github/workflows/promote.yml) → [deploy.yml](.github/workflows/deploy.yml) | Deploy em **produção** do mesmo bundle de uma execução que já passou por staging (sem `run_id`, a mais recente). Só roda a partir da `main` |
 
-- **CI (todo PR e push):** `tsc --noEmit`, `bun run build` e um smoke test do bundle no Node 24 contra um Postgres de verdade (migrations, `/health` 200, rota protegida 401).
-- **CI também valida** que o bundle se recusa a subir com configuração inválida e que cada `config/env/*.json` tem os campos obrigatórios.
-- **Deploy (só push na `main`):** roda as migrations, envia o bundle ao S3, cria uma nova revisão da Web Function com a configuração de [config/env/prod.json](config/env/prod.json), espera ela assumir 100% do tráfego e testa `publicUrl` + `/api/health`.
+O deploy de cada ambiente ([deploy.yml](.github/workflows/deploy.yml)) roda as migrations com o secret `MIGRATIONS_DATABASE_URL` **do GitHub Environment** (URL direta do banco daquele ambiente), envia o bundle ao S3, cria a revisão com a configuração de `config/env/<ambiente>.json`, move o tráfego, faz o smoke test e, nos ambientes do CDK, volta para a revisão anterior se ele falhar e grava a revisão no ar em `liveRevisionParameter`.
+
+Os jobs declaram o GitHub Environment (`staging`/`production`), e cada role de deploy só pode ser assumida por jobs daquele Environment. Os dois Environments só aceitam a branch `main`.
 
 ### Configuração
 

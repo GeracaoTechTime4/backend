@@ -1,0 +1,200 @@
+name: Deploy
+
+# Publica o bundle já testado (artefato `lambda-bundle` do job de CI) num ambiente.
+# - ci-cd.yml chama para staging, com o bundle da própria execução.
+# - promote.yml chama para production, com o bundle e o commit de uma execução que já foi para
+#   staging. Assim prod recebe exatamente o zip que foi testado em staging.
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: GitHub Environment (staging, production)
+        required: true
+        type: string
+      config:
+        description: Configuração do ambiente (config/env/<ambiente>.json)
+        required: true
+        type: string
+      run_id:
+        description: Execução de onde vem o artefato lambda-bundle (vazio = esta execução)
+        required: false
+        type: string
+        default: ""
+      ref:
+        description: Commit a usar no checkout (migrations e config); vazio = o da execução
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  id-token: write
+  actions: read
+
+jobs:
+  deploy:
+    name: Deploy (${{ inputs.environment }})
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment }}
+      url: ${{ steps.config.outputs.public_url }}
+    concurrency:
+      group: deploy-backend-${{ inputs.environment }}
+      cancel-in-progress: false
+    env:
+      AWS_REGION: us-east-1
+      DEPLOY_CONFIG: ${{ inputs.config }}
+      # Secret do Environment: URL direta (sem -pooler) do banco DESTE ambiente.
+      MIGRATIONS_DATABASE_URL: ${{ secrets.MIGRATIONS_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: lambda-bundle
+          path: deploy/
+          run-id: ${{ inputs.run_id || github.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Ler a configuração do ambiente
+        id: config
+        run: |
+          {
+            echo "FUNCTION_NAME=$(jq -r .functionName "$DEPLOY_CONFIG")"
+            echo "ENDPOINT_NAME=$(jq -r .endpointName "$DEPLOY_CONFIG")"
+            echo "CODE_BUCKET=$(jq -r .codeBucket "$DEPLOY_CONFIG")"
+            echo "PUBLIC_URL=$(jq -r .publicUrl "$DEPLOY_CONFIG")"
+            echo "DEPLOY_ROLE_ARN=$(jq -r .deployRoleArn "$DEPLOY_CONFIG")"
+            # Opcional: parâmetro do SSM que a stack do CDK lê para os pesos do endpoint.
+            echo "LIVE_REVISION_PARAM=$(jq -r '.liveRevisionParameter // empty' "$DEPLOY_CONFIG")"
+          } >> "$GITHUB_ENV"
+          echo "public_url=$(jq -r .publicUrl "$DEPLOY_CONFIG")" >> "$GITHUB_OUTPUT"
+          jq .serviceConfig "$DEPLOY_CONFIG" > service-config.json
+
+      - uses: oven-sh/setup-bun@v2
+        if: env.MIGRATIONS_DATABASE_URL != ''
+      - name: Migrations
+        if: env.MIGRATIONS_DATABASE_URL != ''
+        run: bun install --frozen-lockfile && bun run migrate
+        env:
+          DATABASE_URL: ${{ env.MIGRATIONS_DATABASE_URL }}
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # O comando `aws lambda-web` só existe em versões recentes do AWS CLI.
+      - name: Atualizar AWS CLI
+        run: |
+          curl -sSL https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o awscliv2.zip
+          unzip -q awscliv2.zip
+          sudo ./aws/install --update
+          aws lambda-web help > /dev/null
+
+      - name: Enviar código para o S3
+        id: upload
+        run: |
+          (cd deploy && zip -qX ../function.zip index.js package.json)
+          echo "sha256 do zip: $(sha256sum function.zip | cut -d' ' -f1)"
+          VERSION_ID=$(aws s3api put-object --bucket "$CODE_BUCKET" --key "$FUNCTION_NAME/function.zip" \
+            --body function.zip --query VersionId --output text)
+          echo "version_id=$VERSION_ID" >> "$GITHUB_OUTPUT"
+
+      # A configuração (role, env vars, timeout, logs) vem de $DEPLOY_CONFIG, não da revisão anterior.
+      - name: Criar revisão
+        id: revision
+        env:
+          VERSION_ID: ${{ steps.upload.outputs.version_id }}
+          COMMIT: ${{ inputs.ref || github.sha }}
+        run: |
+          CURRENT=$(aws lambda-web get-web-function-endpoint --function-name "$FUNCTION_NAME" \
+            --endpoint-name "$ENDPOINT_NAME" --query 'revisionWeights[0].revisionId' --output text)
+          echo "Revisão atual: $CURRENT"
+          echo "previous=$CURRENT" >> "$GITHUB_OUTPUT"
+
+          jq -n --arg b "$CODE_BUCKET" --arg k "$FUNCTION_NAME/function.zip" --arg v "$VERSION_ID" \
+            '{codeConfig: {s3Object: {bucket: $b, key: $k, versionId: $v}}, runtimeConfig: {runtime: "nodejs24.x"}}' \
+            > build-config.json
+
+          NEW=$(aws lambda-web create-web-function-revision --function-name "$FUNCTION_NAME" \
+            --build-config file://build-config.json --service-config file://service-config.json \
+            --description "${COMMIT::7}" --query revisionId --output text)
+          echo "Nova revisão: $NEW"
+          echo "id=$NEW" >> "$GITHUB_OUTPUT"
+
+      # Endpoint em LatestRevision (prod antiga): a revisão nova assume o tráfego sozinha.
+      # Endpoint em Disabled (ambientes do CDK): espera a revisão ficar ativa e move o tráfego.
+      - name: Mover o tráfego para a revisão nova
+        env:
+          NEW: ${{ steps.revision.outputs.id }}
+        run: |
+          MODE=$(aws lambda-web get-web-function-endpoint --function-name "$FUNCTION_NAME" \
+            --endpoint-name "$ENDPOINT_NAME" --query autoDeploymentMode --output text)
+          echo "autoDeploymentMode: $MODE"
+
+          if [ "$MODE" != "LatestRevision" ]; then
+            for i in $(seq 1 60); do
+              STATE=$(aws lambda-web get-web-function-revision --function-name "$FUNCTION_NAME" \
+                --revision-id "$NEW" --query state --output text)
+              [ "$STATE" = "Active" ] && break
+              if [ "$STATE" = "Failed" ]; then
+                aws lambda-web get-web-function-revision --function-name "$FUNCTION_NAME" \
+                  --revision-id "$NEW" --query stateReason --output text
+                exit 1
+              fi
+              sleep 5
+            done
+            [ "$STATE" = "Active" ] || { echo "Timeout esperando a revisão $NEW ficar ativa"; exit 1; }
+            aws lambda-web update-web-function-endpoint --function-name "$FUNCTION_NAME" \
+              --endpoint-name "$ENDPOINT_NAME" --revision-weights "revisionId=$NEW,weight=100" > /dev/null
+          fi
+
+          for i in $(seq 1 60); do
+            WEIGHT=$(aws lambda-web get-web-function-endpoint --function-name "$FUNCTION_NAME" \
+              --endpoint-name "$ENDPOINT_NAME" \
+              --query "revisionWeights[?revisionId=='$NEW'].weight | [0]" --output text)
+            [ "$WEIGHT" = "100" ] && echo "Revisão $NEW no ar" && exit 0
+            sleep 10
+          done
+          echo "Timeout esperando a revisão $NEW assumir o tráfego" && exit 1
+
+      # Uma revisão que falha ao iniciar também fica Active: só uma requisição real confirma o deploy.
+      - name: Smoke test
+        id: smoke
+        run: |
+          for i in $(seq 1 12); do
+            if curl -sf "$PUBLIC_URL/api/health"; then
+              test "$(curl -s -o /dev/null -w '%{http_code}' "$PUBLIC_URL/api/turnos")" = "401" && exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::A API não respondeu como esperado após o deploy."
+          exit 1
+
+      # Ambientes do CDK: volta o tráfego para a revisão anterior se o smoke test falhar.
+      - name: Rollback
+        if: failure() && steps.smoke.outcome == 'failure' && env.LIVE_REVISION_PARAM != ''
+        env:
+          PREVIOUS: ${{ steps.revision.outputs.previous }}
+        run: |
+          echo "::warning::Voltando o tráfego para $PREVIOUS"
+          aws lambda-web update-web-function-endpoint --function-name "$FUNCTION_NAME" \
+            --endpoint-name "$ENDPOINT_NAME" --revision-weights "revisionId=$PREVIOUS,weight=100" > /dev/null
+
+      - name: Rollback manual
+        if: failure() && steps.smoke.outcome == 'failure' && env.LIVE_REVISION_PARAM == ''
+        run: |
+          echo "::error::Para voltar à revisão anterior (${{ steps.revision.outputs.previous }}), veja a seção de rollback no README."
+
+      # A stack do CDK lê este parâmetro para os pesos do endpoint: sem ele, o próximo `cdk deploy`
+      # que mexesse no endpoint mandaria o tráfego de volta para a revisão anterior.
+      - name: Registrar a revisão no ar
+        if: env.LIVE_REVISION_PARAM != ''
+        env:
+          NEW: ${{ steps.revision.outputs.id }}
+        run: |
+          aws ssm put-parameter --name "$LIVE_REVISION_PARAM" --type String --value "$NEW" --overwrite > /dev/null
+          echo "$LIVE_REVISION_PARAM = $NEW"
