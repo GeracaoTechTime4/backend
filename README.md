@@ -90,7 +90,7 @@ O `bun run build` gera um bundle único em `deploy/index.js` a partir de [src/la
    aws lambda-web deploy --name shift-swap-api --code deploy --create --auth-type ApplicationManaged
    ```
 
-   Na revisão, defina as variáveis não secretas: `SSM_PREFIX=/shift-swap-api/`, `BETTER_AUTH_URL=https://<domínio do endpoint>`, `CORS_ORIGIN=<url do front>` (só se o front estiver fora dos domínios já aceitos em [src/lib/origins.ts](src/lib/origins.ts)), `APP_TZ=America/Sao_Paulo` e `CROSS_SITE_COOKIES=true` se o front estiver em outro site. Dê à role criada (`awscli-lambdaweb-shift-swap-api`) `ssm:GetParameters` em `arn:aws:ssm:<região>:<conta>:parameter/shift-swap-api/*`.
+   As variáveis não secretas e a configuração da revisão (role, timeout, logs) ficam em [config/env/prod.json](config/env/prod.json) e são aplicadas pelo deploy (veja "Configuração" abaixo). Dê à role criada (`awscli-lambdaweb-shift-swap-api`) `ssm:GetParameters` em `arn:aws:ssm:<região>:<conta>:parameter/shift-swap-api/*`.
 
 4. **Próximos deploys:** automáticos pelo GitHub Actions a cada push na `main` (veja "CI/CD" abaixo). Manualmente: `AWS_PROFILE=mario bun run deploy`.
 
@@ -103,7 +103,14 @@ Para limitar custos: defina `scalingConfig.maxEnvironments` e `throttleConfig.ra
 O workflow [.github/workflows/ci-cd.yml](.github/workflows/ci-cd.yml) roda em todo PR e em todo push na `main`:
 
 - **CI (todo PR e push):** `tsc --noEmit`, `bun run build` e um smoke test do bundle no Node 24 contra um Postgres de verdade (migrations, `/health` 200, rota protegida 401).
-- **Deploy (só push na `main`):** envia o bundle ao S3, cria uma nova revisão da Web Function copiando a configuração da que está no ar (role, variáveis, timeout, logs) e trocando só o código, espera ela assumir 100% do tráfego e testa `https://dkrzib6ua831y.cloudfront.net/api/health`.
+- **CI também valida** que o bundle se recusa a subir com configuração inválida e que cada `config/env/*.json` tem os campos obrigatórios.
+- **Deploy (só push na `main`):** roda as migrations, envia o bundle ao S3, cria uma nova revisão da Web Function com a configuração de [config/env/prod.json](config/env/prod.json), espera ela assumir 100% do tráfego e testa `publicUrl` + `/api/health`.
+
+### Configuração
+
+- **Não secreta:** `config/env/<ambiente>.json` (`serviceConfig.environmentVariables`). Mudar uma variável é um PR nesse arquivo; o deploy aplica. Não edite variáveis pelo console: o próximo deploy sobrescreve.
+- **Secreta:** `DATABASE_URL` e `BETTER_AUTH_SECRET` no SSM Parameter Store, sob o `SSM_PREFIX` do ambiente, carregadas por [src/lambda.ts](src/lambda.ts).
+- **Validação:** [src/config.ts](src/config.ts) valida tudo ao subir e derruba a inicialização com a lista do que falta ou está inválido.
 
 O GitHub acessa a AWS por OIDC, sem chaves guardadas. A role `github-actions-shift-swap-backend` só pode ser assumida pela `main` deste repositório e só cria revisões desta função. Para criar ou atualizar as roles (backend e frontend):
 
@@ -114,11 +121,13 @@ aws cloudformation deploy --profile mario --region us-east-1 \
   --capabilities CAPABILITY_NAMED_IAM
 ```
 
-**Migrations no deploy (opcional):** crie o secret `MIGRATIONS_DATABASE_URL` com a URL **direta** do Neon e o deploy roda `bun run migrate` antes de publicar:
+**Migrations no deploy:** o secret `MIGRATIONS_DATABASE_URL` (URL **direta** do Neon) faz o deploy rodar `bun run migrate` antes de publicar. Sem ele as migrations ficam manuais (`bun run migrate:prod`). Para criar:
 
 ```bash
 gh secret set MIGRATIONS_DATABASE_URL < <(sed -n 's/^DATABASE_URL=//p' .env.production.local)
 ```
+
+**Migrations compatíveis (expand/contract):** durante o deploy a revisão antiga e a nova rodam contra o mesmo banco, e as migrations rodam antes da revisão nova. Toda migration precisa funcionar com o código que está no ar: adicionar colunas/tabelas (opcionais ou com default) num deploy e só remover ou renomear o que ficou sem uso num deploy seguinte.
 
 **Rollback:** o log do passo "Criar revisão" mostra a revisão anterior. Para voltar o tráfego para ela:
 

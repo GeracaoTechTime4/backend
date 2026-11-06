@@ -12,6 +12,7 @@
         "hono": "^4.13.9",
         "pg": "^8.23.0",
         "shift-swap": "^0.6.1",
+        "zod": "^4.6.5",
       },
       "devDependencies": {
         "@better-auth/cli": "^1.4.21",
