@@ -46,7 +46,11 @@ Resources:
             Condition:
               StringEquals:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
-                token.actions.githubusercontent.com:sub: !Sub ${BackendSubPrefix}:ref:refs/heads/${BackendBranch}
+                # Transição: o pipeline novo declara `environment: production` (sub ...:environment:production).
+                # O formato por branch sai quando a prod migrar para a stack ShiftSwap-prod do CDK.
+                token.actions.githubusercontent.com:sub:
+                  - !Sub ${BackendSubPrefix}:ref:refs/heads/${BackendBranch}
+                  - !Sub ${BackendSubPrefix}:environment:production
       Policies:
         - PolicyName: deploy
           PolicyDocument:
@@ -92,7 +96,9 @@ Resources:
             Condition:
               StringEquals:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
-                token.actions.githubusercontent.com:sub: !Sub ${FrontendSubPrefix}:ref:refs/heads/${FrontendBranch}
+                token.actions.githubusercontent.com:sub:
+                  - !Sub ${FrontendSubPrefix}:ref:refs/heads/${FrontendBranch}
+                  - !Sub ${FrontendSubPrefix}:environment:production
       Policies:
         - PolicyName: deploy
           PolicyDocument:

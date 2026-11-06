@@ -3,6 +3,7 @@
   "endpointName": "default",
   "codeBucket": "shift-swap-api-web-666600766236",
   "publicUrl": "https://so.mariochaves.click",
+  "deployRoleArn": "arn:aws:iam::666600766236:role/github-actions-shift-swap-backend",
   "serviceConfig": {
     "executionRoleArn": "arn:aws:iam::666600766236:role/shift-swap-api-web-role",
     "timeoutSeconds": 30,
