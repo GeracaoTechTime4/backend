@@ -11,7 +11,8 @@ const environments: ShiftSwapEnvironment[] = [
     name: "staging",
     githubEnvironment: "staging",
     domainName: "so-staging.mariochaves.click",
-    attachDomain: true,
+    aliases: ["so-staging.mariochaves.click"],
+    dnsRecords: [{ id: "Alias", name: "so-staging.mariochaves.click" }],
     maxEnvironments: 2,
     // Valores aceitos: 0, 100, 200, ..., 1000, 2000, ..., 10000.
     rateLimit: 100,
@@ -20,8 +21,9 @@ const environments: ShiftSwapEnvironment[] = [
     name: "prod",
     githubEnvironment: "production",
     domainName: "so.mariochaves.click",
-    // false até a troca do alias da distribuição antiga (E3QT1JW59DWN5A) para a nova.
-    attachDomain: false,
+    // Migrado da distribuição antiga (E3QT1JW59DWN5A) sem queda; o roteiro está em infra/cdk/README.md.
+    aliases: ["so.mariochaves.click"],
+    dnsRecords: [{ id: "Alias", name: "so.mariochaves.click" }],
     maxEnvironments: 2,
     rateLimit: 100,
   },

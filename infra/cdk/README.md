@@ -9,7 +9,7 @@ Uma stack por ambiente (`ShiftSwap-staging`, `ShiftSwap-prod`), definida em [lib
 | Bucket do código da API (versionado) | `shift-swap-api-code-<env>-<conta>` |
 | Bucket do front (privado, via OAC) | `shift-swap-frontend-<env>-<conta>` |
 | CloudFront: front + `/api/*` no mesmo domínio, funções em [functions/](functions/) | `shift-swap <env>` |
-| Route 53 A/AAAA (quando `attachDomain`) | `so-staging.mariochaves.click` / `so.mariochaves.click` |
+| Route 53 A/AAAA (`dnsRecords`) | `so-staging.mariochaves.click` / `so.mariochaves.click` |
 | Roles do GitHub Actions (só jobs com `environment: <env>`) | `github-actions-shift-swap-{backend,frontend}-<env>` |
 
 ## Quem cuida do quê
@@ -50,3 +50,19 @@ AWS_PROFILE=mario npx cdk deploy ShiftSwap-staging
 - `throttleConfig.rateLimit` só aceita 0, 100, 200, …, 1000, 2000, …, 10000.
 - O Lambda lê o código com o principal `lambda.amazonaws.com`: o bucket precisa da policy `LambdaReadCode`.
 - O ponto de entrada do pacote precisa ser `index.js` na raiz do zip.
+
+## Troca de domínio sem queda (prod antiga → `ShiftSwap-prod`)
+
+Um alias só pode estar em uma distribuição, e o `update-domain-association` exige que a distribuição de destino já tenha um certificado que cubra o alias.
+
+1. **Alias temporário:** `aliases: ["so-prod.mariochaves.click"]` e `npx cdk deploy ShiftSwap-prod`. A distribuição nova ganha o certificado curinga.
+2. **Mover o alias:** um TXT `_so.mariochaves.click` com o domínio `*.cloudfront.net` da distribuição nova e depois:
+
+   ```bash
+   aws cloudfront update-domain-association --domain so.mariochaves.click \
+     --target-resource DistributionId=<distribuição nova> --if-match <ETag da distribuição nova>
+   ```
+
+   O alias muda de distribuição numa operação atômica. O tráfego já vai para a distribuição nova mesmo com o DNS antigo, porque o CloudFront roteia pelo domínio da requisição.
+3. **DNS:** UPSERT dos registros A/AAAA de `so.mariochaves.click` para a distribuição nova (troca atômica, sem janela sem DNS). Em seguida, `dnsRecords` ganha `{ id: "Alias", name: "so.mariochaves.click" }` e `npx cdk import ShiftSwap-prod` traz os registros para a stack.
+4. **Limpeza:** `aliases: ["so.mariochaves.click"]`, sem o `TempAlias` em `dnsRecords`, `npx cdk deploy ShiftSwap-prod` e remoção do TXT.

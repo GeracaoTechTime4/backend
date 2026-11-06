@@ -1,25 +1,26 @@
 {
-  "functionName": "shift-swap-api",
+  "functionName": "shift-swap-api-prod",
   "endpointName": "default",
-  "codeBucket": "shift-swap-api-web-666600766236",
+  "codeBucket": "shift-swap-api-code-prod-666600766236",
   "publicUrl": "https://so.mariochaves.click",
-  "deployRoleArn": "arn:aws:iam::666600766236:role/github-actions-shift-swap-backend",
+  "deployRoleArn": "arn:aws:iam::666600766236:role/github-actions-shift-swap-backend-prod",
+  "liveRevisionParameter": "/shift-swap-api/prod/live-revision",
   "serviceConfig": {
-    "executionRoleArn": "arn:aws:iam::666600766236:role/shift-swap-api-web-role",
+    "executionRoleArn": "arn:aws:iam::666600766236:role/shift-swap-api-prod-web-role",
     "timeoutSeconds": 30,
     "maxConcurrencyPerEnvironment": 64,
     "environmentVariables": {
       "NODE_ENV": "production",
-      "SSM_PREFIX": "/shift-swap-api/",
-      "BETTER_AUTH_URL": "https://dkrzib6ua831y.cloudfront.net",
-      "CORS_ORIGIN": "https://so.mariochaves.click,https://dkrzib6ua831y.cloudfront.net",
+      "SSM_PREFIX": "/shift-swap-api/prod/",
+      "BETTER_AUTH_URL": "https://so.mariochaves.click",
+      "CORS_ORIGIN": "https://so.mariochaves.click",
       "CROSS_SITE_COOKIES": "false",
       "APP_TZ": "America/Sao_Paulo",
       "PG_POOL_MAX": "5"
     },
     "telemetryConfig": {
       "loggingConfig": {
-        "logGroup": "/aws/lambda/web/shift-swap-api",
+        "logGroup": "/aws/lambda/web/shift-swap-api-prod",
         "applicationLogLevel": "INFO",
         "systemLogLevel": "INFO"
       }
