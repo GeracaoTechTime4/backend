@@ -17,13 +17,15 @@ export interface ShiftSwapEnvironment {
   name: string;
   /** GitHub Environment cujos jobs podem assumir as roles de deploy ("staging", "production"). */
   githubEnvironment: string;
-  /** Domínio público (front + /api). */
+  /** Domínio público canônico (front + /api), usado na saída PublicUrl. */
   domainName: string;
+  /** Domínios associados à distribuição (precisam estar cobertos pelo certificado). */
+  aliases: string[];
   /**
-   * Associa o domínio à distribuição e cria os registros no Route 53. Na prod nova fica false até a
-   * troca: o alias ainda está na distribuição antiga e um alias só pode estar em uma distribuição.
+   * Registros A/AAAA no Route 53 apontando para a distribuição. O `id` é o prefixo dos IDs lógicos
+   * (`<id>A`/`<id>AAAA`): mantenha-o estável, ou o CloudFormation recria o registro.
    */
-  attachDomain: boolean;
+  dnsRecords: { id: string; name: string }[];
   /** Limites do endpoint da Web Function. */
   maxEnvironments: number;
   rateLimit: number;
@@ -197,9 +199,9 @@ export class ShiftSwapStack extends cdk.Stack {
       defaultRootObject: "index.html",
       priceClass: cloudfront.PriceClass.PRICE_CLASS_100,
       httpVersion: cloudfront.HttpVersion.HTTP2_AND_3,
-      ...(env.attachDomain && {
+      ...(env.aliases.length > 0 && {
         minimumProtocolVersion: cloudfront.SecurityPolicyProtocol.TLS_V1_2_2021,
-        domainNames: [env.domainName],
+        domainNames: env.aliases,
         certificate: acm.Certificate.fromCertificateArn(this, "Certificate", props.certificateArn),
       }),
       defaultBehavior: {
@@ -224,14 +226,16 @@ export class ShiftSwapStack extends cdk.Stack {
       },
     });
 
-    if (env.attachDomain) {
+    if (env.dnsRecords.length > 0) {
       const zone = route53.HostedZone.fromHostedZoneAttributes(this, "Zone", {
         hostedZoneId: props.hostedZoneId,
         zoneName: props.hostedZoneName,
       });
       const target = route53.RecordTarget.fromAlias(new targets.CloudFrontTarget(distribution));
-      new route53.ARecord(this, "AliasA", { zone, recordName: env.domainName, target });
-      new route53.AaaaRecord(this, "AliasAAAA", { zone, recordName: env.domainName, target });
+      for (const record of env.dnsRecords) {
+        new route53.ARecord(this, `${record.id}A`, { zone, recordName: record.name, target });
+        new route53.AaaaRecord(this, `${record.id}AAAA`, { zone, recordName: record.name, target });
+      }
     }
 
     // --- Roles do GitHub Actions (OIDC) ---------------------------------------------------------
@@ -304,7 +308,9 @@ export class ShiftSwapStack extends cdk.Stack {
       FrontendBucket: frontendBucket.bucketName,
       DistributionId: distribution.distributionId,
       DistributionDomainName: distribution.distributionDomainName,
-      PublicUrl: env.attachDomain ? `https://${env.domainName}` : `https://${distribution.distributionDomainName}`,
+      PublicUrl: env.aliases.includes(env.domainName)
+        ? `https://${env.domainName}`
+        : `https://${distribution.distributionDomainName}`,
       BackendDeployRoleArn: backendDeployRole.roleArn,
       FrontendDeployRoleArn: frontendDeployRole.roleArn,
     };
