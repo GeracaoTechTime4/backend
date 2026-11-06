@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
 import { auth } from "./lib/auth";
+import { withClientIp } from "./lib/client-ip";
 import { allowedOrigins } from "./lib/origins";
 import { requireAuth, requireEmployee, requireSupervisor } from "./lib/session-middleware";
 import {
@@ -38,7 +39,7 @@ app.use(
   }),
 );
 
-app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw));
+app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(withClientIp(c.req.raw)));
 
 app.get("/health", (c) => c.json({ status: "ok", timestamp: new Date().toISOString() }));
 
