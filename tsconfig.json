@@ -26,5 +26,7 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
-  }
+  },
+  // infra/cdk tem tsconfig e dependências próprias (o CI da API não instala o aws-cdk-lib).
+  "exclude": ["node_modules", "deploy", "infra"]
 }
