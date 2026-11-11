@@ -30,8 +30,8 @@ Atualizado em 2026-11-11. Plano original: IaC em CDK, ambientes staging/prod, co
 
 **Feito (branch `fix/cadastro-sem-role` no backend e no front, sem PR ainda):**
 - Backend: `role` com `input: false` e `defaultValue: "EMPLOYEE"`, mais um hook `before` que força `EMPLOYEE`. Um `role` enviado no corpo é ignorado (sem erro), então o front atual continua funcionando e o backend pode ir antes.
-- Promoção a supervisor fora da API: `bun run supervisor:promover <email>` (prod: `supervisor:promover:prod`), também usada pelo seed. Recusa quem já tem turnos ou solicitações (apagar o funcionário levaria os turnos junto, por `ON DELETE CASCADE`).
-- Rebaixamento para desfazer promoção por engano: `bun run supervisor:rebaixar <email>` (prod: `supervisor:rebaixar:prod`). Recusa supervisor com decisões no histórico e o último supervisor.
+- Promoção a supervisor fora da API: `bun run supervisor:promover <email>` (`:staging` e `:prod` para os ambientes da AWS), também usada pelo seed. Recusa quem já tem turnos ou solicitações (apagar o funcionário levaria os turnos junto, por `ON DELETE CASCADE`).
+- Rebaixamento para desfazer promoção por engano: `bun run supervisor:rebaixar <email>` (idem). Recusa supervisor com decisões no histórico e o último supervisor.
 - Auditoria em prod (2026-11-11): 3 supervisores, todos legítimos.
 - Seed: a senha `password123` era recusada pelo `haveIBeenPwned`, então o seed estava quebrado. Trocada por `turno-local-seed-2026`.
 - Front: sem o seletor de papel no cadastro; `role` com `input: false` no client.
