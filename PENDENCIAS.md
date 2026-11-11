@@ -63,7 +63,7 @@ Ficou na AWS só o que é das stacks `ShiftSwap-staging` e `ShiftSwap-prod`, al�
 ## 4. Melhorias menores
 
 - **Validação no cadastro:** corrigida na branch `fix/validacao-cadastro`. Nome e e-mail passam pelas regras do domínio no hook `before`; falhas devolvem `400` com `code` e `issues`, e nenhum usuário é criado. Antes, no Postgres (não no PGlite), a falha devolvia `500` e deixava o usuário do Better Auth sem o registro de funcionário. Conferido em 2026-11-11: nenhum usuário órfão em staging nem em prod.
-- **`sslmode` da `DATABASE_URL`:** o `pg` avisa, nos dois ambientes, que `require` vai deixar de valer como `verify-full` no `pg` 9. Usar `sslmode=verify-full` antes de atualizar.
+- **`sslmode` da `DATABASE_URL`:** prod (SSM e `MIGRATIONS_DATABASE_URL`) já usava `verify-full`. Em 2026-11-11 staging passou a usar também: SSM, secret do Environment e `.env.staging.local`. Documentado no `infra/cdk/README.md`.
 - **E-mails antigos com maiúsculas (opcional):** o shift-swap 0.7 normaliza na leitura, mas o banco só muda no próximo `update`. Para alinhar: `UPDATE funcionario SET email = lower(trim(email))` e o mesmo em `supervisor`.
 - **Limite de tentativas burlável:** chamadas direto ao domínio da Web Function (`*.lambda-web...on.aws`), sem passar pelo CloudFront, conseguem forjar `CloudFront-Viewer-Address`. Fechar com um header secreto enviado pelo CloudFront (origin custom header) e validado pela API.
 - **Itens 4 a 6 da revisão do Better Auth:** captcha (Turnstile), verificação de e-mail, recuperação de senha e 2FA para supervisores.
