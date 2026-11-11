@@ -1,5 +1,7 @@
 import { betterAuth } from "better-auth";
+import { APIError } from "better-auth/api";
 import { haveIBeenPwned } from "better-auth/plugins";
+import { FuncionarioEntity } from "shift-swap";
 import { config } from "../config";
 import { CLIENT_IP_HEADER } from "./client-ip";
 import { authDatabase } from "./db";
@@ -51,8 +53,23 @@ export const auth = betterAuth({
   databaseHooks: {
     user: {
       create: {
-        // Reforço além do `input: false`: nenhum caminho de criação de usuário gera supervisor.
-        before: async (user) => ({ data: { ...user, role: "EMPLOYEE" } }),
+        before: async (user) => {
+          // Valida nome e e-mail com as regras do domínio antes de criar o usuário: uma falha no
+          // `after` (já com o usuário gravado) virava 500. O Better Auth exige `throw` aqui para
+          // abortar; o APIError vira 400 com o mesmo formato de erro das rotas do domínio.
+          const funcionario = FuncionarioEntity.create({ name: user.name, email: user.email });
+          if (funcionario.isFail()) {
+            const { issues } = funcionario.error;
+            throw new APIError("BAD_REQUEST", {
+              message: issues.map((issue) => issue.message).join("; "),
+              code: issues.length === 1 ? issues[0]?.code : funcionario.error.code,
+              issues,
+            });
+          }
+          // Reforço além do `input: false`: nenhum caminho de criação de usuário gera supervisor.
+          // O nome é gravado como o domínio o normaliza (sem espaços nas pontas).
+          return { data: { ...user, name: funcionario.value.name.value, role: "EMPLOYEE" } };
+        },
         after: async (user) => {
           const result = await criarFuncionario.execute({ id: user.id, name: user.name, email: user.email });
 

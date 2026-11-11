@@ -64,7 +64,7 @@ A prod antiga não serve mais tráfego (o alias foi movido em 2026-11-06). Ainda
 
 ## 4. Melhorias menores
 
-- **Validação no cadastro:** qualquer falha de validação do domínio no cadastro (nome com menos de 3 caracteres, e-mail com mais de 254, código `EMAIL_LONGO` do shift-swap 0.7) retorna `500` em vez de `400`, e o usuário do Better Auth fica criado sem o registro de funcionário. Validar nome e e-mail no hook `before`, antes de criar o usuário.
+- **Validação no cadastro:** corrigida na branch `fix/validacao-cadastro`. Nome e e-mail passam pelas regras do domínio no hook `before`; falhas devolvem `400` com `code` e `issues`, e nenhum usuário é criado. Antes, no Postgres (não no PGlite), a falha devolvia `500` e deixava o usuário do Better Auth sem o registro de funcionário. Conferido em 2026-11-11: nenhum usuário órfão em staging nem em prod.
 - **`sslmode` da `DATABASE_URL`:** o `pg` avisa, nos dois ambientes, que `require` vai deixar de valer como `verify-full` no `pg` 9. Usar `sslmode=verify-full` antes de atualizar.
 - **E-mails antigos com maiúsculas (opcional):** o shift-swap 0.7 normaliza na leitura, mas o banco só muda no próximo `update`. Para alinhar: `UPDATE funcionario SET email = lower(trim(email))` e o mesmo em `supervisor`.
 - **Limite de tentativas burlável:** chamadas direto ao domínio da Web Function (`*.lambda-web...on.aws`), sem passar pelo CloudFront, conseguem forjar `CloudFront-Viewer-Address`. Fechar com um header secreto enviado pelo CloudFront (origin custom header) e validado pela API.
