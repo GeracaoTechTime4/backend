@@ -37,21 +37,19 @@ Atualizado em 2026-11-11. Plano original: IaC em CDK, ambientes staging/prod, co
 
 **Opcional:** `emailAndPassword.disableSignUp: true` se o cadastro passar a ser só por convite.
 
-## 2. Remover a infra antiga — em andamento
+## 2. Remover a infra antiga — ✅ concluído em 2026-11-11
 
-Verificado em 2026-11-11: a distribuição antiga não recebe tráfego desde 2026-11-07 e a função antiga não roda desde 2026-11-08. As roles antigas do GitHub não são usadas desde 2026-11-06.
+A prod antiga não recebia tráfego desde 2026-11-08. Removidos (PR #22 no repositório; na AWS, pelo usuário):
 
-**Feito:**
-- **Endpoint da função antiga removido (2026-11-11).** Ele continuava público em `h3chszyh56pbwygw.w68.lambda-web.us-east-1.on.aws`, com o código de 2026-11-06 (cadastro ainda aceitando `role: SUPERVISOR`) e os segredos de `/shift-swap-api/`, que apontam para o **mesmo banco de prod**. Sem uso desde 2026-11-08; a auditoria depois da remoção encontrou só os 3 supervisores legítimos.
-- Repositório: removidos o script `deploy` antigo do `package.json`, o `infra/github-actions-roles.yaml` e o setup manual da função antiga no README (branch `chore/remover-infra-antiga`).
+- Lambda Web Function `shift-swap-api` (endpoint, revisões, role `shift-swap-api-web-role` e log groups).
+- CloudFront: distribuição `E3QT1JW59DWN5A` (`dkrzib6ua831y.cloudfront.net`), funções `shift-swap-api-prefix` e `shift-swap-spa-fallback`, OAC `EAGK84APE4MJ1`.
+- S3: `shift-swap-api-web-666600766236` (com versões) e `shift-swap-frontend-666600766236`.
+- IAM: stack `shift-swap-github-actions` (roles sem sufixo). O provedor OIDC do GitHub não fazia parte dela e continua em uso.
+- SSM: `/shift-swap-api/DATABASE_URL` e `/shift-swap-api/BETTER_AUTH_SECRET`.
 
-**Falta remover na AWS** (comandos rodados pelo usuário):
-- **Lambda Web Function:** `shift-swap-api` (já sem endpoint), a role `shift-swap-api-web-role` e os log groups `/aws/lambda/web/shift-swap-api(.local)`.
-- **CloudFront:** desabilitar a distribuição `E3QT1JW59DWN5A` (`dkrzib6ua831y.cloudfront.net`), esperar o `Deployed` e excluir; depois as funções `shift-swap-api-prefix` e `shift-swap-spa-fallback` e a OAC `EAGK84APE4MJ1`.
-- **S3:** esvaziar e excluir `shift-swap-api-web-666600766236` e `shift-swap-frontend-666600766236`.
-- **IAM:** excluir a stack `shift-swap-github-actions` (roles `github-actions-shift-swap-backend` e `-frontend`, sem sufixo).
-- **SSM:** `/shift-swap-api/DATABASE_URL` e `/shift-swap-api/BETTER_AUTH_SECRET` (os de cada ambiente estão em `/shift-swap-api/<ambiente>/`).
-- Não mexer nos recursos `hono-starter-*`: são de outro projeto.
+**Incidente fechado:** o endpoint da função antiga continuava público, com o código de 2026-11-06 (cadastro aceitando `role: SUPERVISOR`) e ligado ao banco de prod. Sem uso desde 2026-11-08; a auditoria depois da remoção encontrou só os 3 supervisores legítimos.
+
+Ficou na AWS só o que é das stacks `ShiftSwap-staging` e `ShiftSwap-prod`, além dos recursos `hono-starter-*` (outro projeto).
 
 ## 3. Fase 4: canary com rollback automático
 
