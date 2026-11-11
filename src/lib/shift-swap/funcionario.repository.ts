@@ -1,4 +1,5 @@
-import { EmailVO, FuncionarioEntity, FuncionarioId, type FuncionarioRepository, NameVO } from "shift-swap";
+import { Email, Text } from "core-kernel/vo";
+import { FuncionarioEntity, FuncionarioId, type FuncionarioRepository } from "shift-swap";
 import type { Db } from "../db";
 
 interface PessoaRow {
@@ -11,7 +12,7 @@ interface PessoaRow {
 // aqui indica dado corrompido e vira erro UNEXPECTED no use case.
 function toEntity(row: PessoaRow): FuncionarioEntity {
   return FuncionarioEntity.reconstituir(
-    { name: NameVO.create(row.name).unwrap(), email: EmailVO.create(row.email).unwrap() },
+    { name: Text.create(row.name).unwrap(), email: Email.create(row.email).unwrap() },
     FuncionarioId.from(row.id).unwrap(),
   );
 }
