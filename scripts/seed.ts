@@ -1,8 +1,9 @@
 import { auth } from "../src/lib/auth";
 import { pool } from "../src/lib/db";
+import { PromoverSupervisorUseCase } from "../src/lib/promover-supervisor";
 import { criarTurno } from "../src/lib/shift-swap";
 
-const SEED_PASSWORD = "password123";
+const SEED_PASSWORD = "turno-local-seed-2026";
 
 interface SeedUser {
   name: string;
@@ -18,7 +19,7 @@ const funcionarios = [joao, maria];
 async function ensureUser(seedUser: SeedUser): Promise<string> {
   try {
     const { user } = await auth.api.signUpEmail({
-      body: { name: seedUser.name, email: seedUser.email, password: SEED_PASSWORD, role: seedUser.role },
+      body: { name: seedUser.name, email: seedUser.email, password: SEED_PASSWORD },
     });
     console.log(`  criado: ${seedUser.email} (${seedUser.role}) - id ${user.id}`);
     return user.id;
@@ -40,7 +41,13 @@ function addDays(days: number): string {
 }
 
 console.log("Criando usuários...");
-const supervisorId = await ensureUser(supervisor);
+// O cadastro sempre cria EMPLOYEE; a supervisora é promovida em seguida (idempotente).
+await ensureUser(supervisor);
+const promocao = await new PromoverSupervisorUseCase(pool).execute({ email: supervisor.email });
+if (promocao.isFail()) {
+  throw new Error(`Não consegui promover ${supervisor.email}: ${promocao.error.message}`, { cause: promocao.error });
+}
+const supervisorId = promocao.value.id;
 const joaoId = await ensureUser(joao);
 const mariaId = await ensureUser(maria);
 
