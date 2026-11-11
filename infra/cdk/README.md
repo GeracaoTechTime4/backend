@@ -40,6 +40,8 @@ AWS_PROFILE=mario npx cdk deploy ShiftSwap-staging
    aws ssm put-parameter --type SecureString --name /shift-swap-api/<env>/BETTER_AUTH_SECRET --value "$(openssl rand -base64 32)"
    ```
 
+   Nas URLs do banco (aqui, no secret `MIGRATIONS_DATABASE_URL` do Environment e nos `.env.*.local`), use `sslmode=verify-full`. Com `require`, o `pg` avisa que o comportamento muda no `pg` 9: passa a criptografar sem verificar o certificado.
+
 2. `npx cdk deploy ShiftSwap-<env>` e crie `config/env/<env>.json` com as saídas da stack.
 3. Migrations com a URL **direta** do banco: `DATABASE_URL='<URL direta>' bun run migrate`.
 4. Primeiro deploy da API (pipeline ou manual): revisão nova, `update-web-function-endpoint --revision-weights revisionId=<rev>,weight=100` e grave `<rev>` em `/shift-swap-api/<env>/live-revision`.
