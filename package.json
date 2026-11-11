@@ -20,7 +20,8 @@
     "@better-auth/cli": "^1.4.21",
     "@electric-sql/pglite": "^0.5.8",
     "@types/bun": "latest",
-    "@types/pg": "^8.23.1"
+    "@types/pg": "^8.23.1",
+    "core-kernel-check": "^0.1.0"
   },
   "peerDependencies": {
     "typescript": "^7"
