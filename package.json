@@ -12,6 +12,10 @@
     "migrate": "bun run migrate:auth && bun run db:migrate",
     "migrate:prod": "bun --env-file=.env.production.local run migrate",
     "seed": "bun run scripts/seed.ts",
+    "supervisor:promover": "bun run scripts/promover-supervisor.ts",
+    "supervisor:promover:prod": "bun --env-file=.env.production.local run scripts/promover-supervisor.ts",
+    "supervisor:rebaixar": "bun run scripts/rebaixar-supervisor.ts",
+    "supervisor:rebaixar:prod": "bun --env-file=.env.production.local run scripts/rebaixar-supervisor.ts",
     "build": "bun build src/lambda.ts --target=node --format=esm --define 'process.env.NODE_ENV=\"production\"' --outfile=deploy/index.js --external @electric-sql/pglite --external pg-native && echo '{\"type\":\"module\"}' > deploy/package.json",
     "start:node": "node deploy/index.js",
     "deploy": "bun run build && aws lambda-web deploy --name shift-swap-api --code deploy --bucket-name shift-swap-api-web-666600766236 --region us-east-1"

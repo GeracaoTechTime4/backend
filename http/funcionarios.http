@@ -3,7 +3,7 @@
 
 @baseUrl = http://localhost:3000
 @origin = http://localhost:5173
-@senha = password123
+@senha = turno-local-seed-2026
 
 ### 1. Login do supervisor
 POST {{baseUrl}}/api/auth/sign-in/email

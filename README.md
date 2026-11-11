@@ -39,7 +39,7 @@ API de troca de plantões com autenticação via [Better Auth](https://www.bette
    bun run seed
    ```
 
-   O script imprime as credenciais criadas (senha `password123` para todos). É idempotente: rodar de novo reaproveita os usuários já existentes em vez de duplicar.
+   O script imprime as credenciais criadas (senha `turno-local-seed-2026` para todos). É idempotente: rodar de novo reaproveita os usuários já existentes em vez de duplicar.
 
 6. Rode a API:
 
@@ -150,7 +150,9 @@ Com o endpoint em `Disabled`, novas revisões não assumem o tráfego sozinhas; 
 ## Endpoints
 
 - `GET /health` — health-check, retorna `{ status: "ok", timestamp }`.
-- `POST /api/auth/sign-up/email` — cria um usuário. O corpo deve incluir `email`, `password`, `name` e `role` (`"SUPERVISOR"` ou `"EMPLOYEE"`), este último obrigatório para diferenciar os dois tipos de usuário.
+- `POST /api/auth/sign-up/email` — cria um usuário `EMPLOYEE`. Corpo: `email`, `password` e `name`. O papel é definido pelo servidor: um `role` enviado no corpo é ignorado.
+- Supervisores são promovidos fora da API, a partir de um usuário já cadastrado: `bun run supervisor:promover <email>` (em prod, `bun run supervisor:promover:prod <email>`, com `.env.production.local`). A promoção recusa quem já tem turnos ou solicitações e pode ser repetida sem efeito.
+- Para desfazer uma promoção feita por engano: `bun run supervisor:rebaixar <email>` (em prod, `supervisor:rebaixar:prod`). Recusa supervisor que já decidiu solicitações (o histórico aponta para ele) e o último supervisor.
 - `POST /api/auth/sign-in/email` — login.
 - Demais rotas expostas pelo Better Auth ficam sob o prefixo `/api/auth/*` (ver [documentação](https://www.better-auth.com/docs)).
 - `GET /turnos` — rota privada, exige sessão autenticada e `role` `SUPERVISOR` (401 sem sessão, 403 se for `EMPLOYEE`). Lista todos os turnos via `ListarTurnosUseCase`.
@@ -192,7 +194,7 @@ Toda solicitação na resposta traz `solicitanteNome` e `destinatarioNome`. `apr
 
 ## Testando os endpoints (REST Client)
 
-A pasta [http](http) tem arquivos `*.http` para a extensão [REST Client](https://marketplace.visualstudio.com/items?itemName=humao.rest-client) do VS Code (clique em *Send Request* acima de cada bloco). Rode `bun run seed` antes: os arquivos usam os usuários do seed (senha `password123`).
+A pasta [http](http) tem arquivos `*.http` para a extensão [REST Client](https://marketplace.visualstudio.com/items?itemName=humao.rest-client) do VS Code (clique em *Send Request* acima de cada bloco). Rode `bun run seed` antes: os arquivos usam os usuários do seed (senha `turno-local-seed-2026`).
 
 | Arquivo | Cobre |
 | --- | --- |

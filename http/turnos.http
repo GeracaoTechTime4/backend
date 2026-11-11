@@ -1,10 +1,10 @@
 # Turnos — GET /turnos, POST /turnos, GET /turnos/me
 # Rode de cima para baixo: os logins trocam o cookie de sessão a cada passo.
-# Pré-requisito: `bun run seed` (usuários joao/supervisor com senha password123).
+# Pré-requisito: `bun run seed` (usuários joao/supervisor com senha turno-local-seed-2026).
 
 @baseUrl = http://localhost:3000
 @origin = http://localhost:5173
-@senha = password123
+@senha = turno-local-seed-2026
 
 ### 1. Login do João (só para capturar o id dele)
 # @name loginJoao

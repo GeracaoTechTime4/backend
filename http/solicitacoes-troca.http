@@ -11,7 +11,7 @@
 # Rode de cima para baixo (a cada "Send Request"). Os logins trocam o cookie de sessão e
 # os ids ficam guardados nas variáveis nomeadas (@name).
 #
-# Pré-requisito: `bun run seed` (supervisor, João e Maria, senha password123).
+# Pré-requisito: `bun run seed` (supervisor, João e Maria, senha turno-local-seed-2026).
 # João é quem pede (A) e Maria é a destinatária (B).
 #
 # O fluxo cria turnos novos do João em datas aleatórias de 2099, então pode ser repetido
@@ -19,7 +19,7 @@
 
 @baseUrl = http://localhost:3000
 @origin = http://localhost:5173
-@senha = password123
+@senha = turno-local-seed-2026
 
 ### ═══ PREPARAÇÃO — ids e turnos do João ═══
 

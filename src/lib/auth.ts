@@ -4,7 +4,7 @@ import { config } from "../config";
 import { CLIENT_IP_HEADER } from "./client-ip";
 import { authDatabase } from "./db";
 import { allowedOrigins } from "./origins";
-import { criarFuncionario, criarSupervisor } from "./shift-swap";
+import { criarFuncionario } from "./shift-swap";
 
 export const auth = betterAuth({
   database: authDatabase,
@@ -38,25 +38,26 @@ export const auth = betterAuth({
   plugins: [haveIBeenPwned()],
   user: {
     additionalFields: {
+      // O papel é do servidor: o cadastro público sempre cria EMPLOYEE e um `role` enviado no corpo é
+      // ignorado. Supervisores são promovidos por src/lib/promover-supervisor.ts (seed e script).
       role: {
         type: ["SUPERVISOR", "EMPLOYEE"],
-        required: true,
-        input: true,
+        required: false,
+        defaultValue: "EMPLOYEE",
+        input: false,
       },
     },
   },
   databaseHooks: {
     user: {
       create: {
+        // Reforço além do `input: false`: nenhum caminho de criação de usuário gera supervisor.
+        before: async (user) => ({ data: { ...user, role: "EMPLOYEE" } }),
         after: async (user) => {
-          const role = (user as typeof user & { role: "SUPERVISOR" | "EMPLOYEE" }).role;
-          const input = { id: user.id, name: user.name, email: user.email };
-
-          const result =
-            role === "SUPERVISOR" ? await criarSupervisor.execute(input) : await criarFuncionario.execute(input);
+          const result = await criarFuncionario.execute({ id: user.id, name: user.name, email: user.email });
 
           if (result.isFail()) {
-            throw new Error(`Failed to create ${role} record for user ${user.id}: ${result.error.message}`, {
+            throw new Error(`Failed to create EMPLOYEE record for user ${user.id}: ${result.error.message}`, {
               cause: result.error,
             });
           }

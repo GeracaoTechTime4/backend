@@ -2,61 +2,39 @@
 # O cookie de sessão é guardado pelo REST Client e reaproveitado nas próximas requisições
 # (um login novo substitui o anterior).
 #
-# Usuários do `bun run seed` (senha para todos: password123):
+# Usuários do `bun run seed` (senha para todos: turno-local-seed-2026):
 #   supervisor@example.com (SUPERVISOR) · joao@example.com e maria@example.com (EMPLOYEE)
 
 @baseUrl = http://localhost:3000
 @origin = http://localhost:5173
-@senha = password123
+@senha = turno-local-seed-2026
 
 ### Health-check — 200 { status: "ok", timestamp }
 GET {{baseUrl}}/health
 
-### Cadastro: supervisor — 200; se já existir (ex.: criado pelo seed) a API recusa
+### Cadastro: funcionário — 200; se o e-mail já existir a API recusa.
+# Todo cadastro cria EMPLOYEE. Supervisores são promovidos fora da API:
+#   bun run supervisor:promover <email>
 POST {{baseUrl}}/api/auth/sign-up/email
 Content-Type: application/json
 Origin: {{origin}}
 
 {
-  "name": "Ana Supervisora",
-  "email": "supervisor@example.com",
+  "name": "Carla Funcionária",
+  "email": "carla@example.com",
+  "password": "{{senha}}"
+}
+
+### Cadastro tentando virar supervisor — 200, mas o `role` enviado é ignorado (user.role = EMPLOYEE)
+POST {{baseUrl}}/api/auth/sign-up/email
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "name": "Tentativa Supervisor",
+  "email": "tentativa-supervisor@example.com",
   "password": "{{senha}}",
   "role": "SUPERVISOR"
-}
-
-### Cadastro: funcionário João — 200; se já existir a API recusa
-POST {{baseUrl}}/api/auth/sign-up/email
-Content-Type: application/json
-Origin: {{origin}}
-
-{
-  "name": "João Funcionário",
-  "email": "joao@example.com",
-  "password": "{{senha}}",
-  "role": "EMPLOYEE"
-}
-
-### Cadastro: funcionária Maria — 200; se já existir a API recusa
-POST {{baseUrl}}/api/auth/sign-up/email
-Content-Type: application/json
-Origin: {{origin}}
-
-{
-  "name": "Maria Funcionária",
-  "email": "maria@example.com",
-  "password": "{{senha}}",
-  "role": "EMPLOYEE"
-}
-
-### Cadastro sem role — erro de validação (role é obrigatório)
-POST {{baseUrl}}/api/auth/sign-up/email
-Content-Type: application/json
-Origin: {{origin}}
-
-{
-  "name": "Sem Papel",
-  "email": "sem-papel@example.com",
-  "password": "{{senha}}"
 }
 
 ### Login: supervisor — 200, define o cookie de sessão
