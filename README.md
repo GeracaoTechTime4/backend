@@ -70,37 +70,15 @@ Em produção a API roda no [AWS Lambda Web Functions](https://docs.aws.amazon.c
 
 O `bun run build` gera um bundle único em `deploy/index.js` a partir de [src/lambda.ts](src/lambda.ts), que carrega `DATABASE_URL` e `BETTER_AUTH_SECRET` do SSM Parameter Store (quando `SSM_PREFIX` está definido) e então importa a API. Localmente o Bun continua sendo usado para `dev`, `migrate` e `seed`. O bundle sempre roda como produção: sem um `DATABASE_URL` Postgres ele não sobe (o PGlite não serve no Lambda, porque o disco é efêmero e cada instância teria o seu).
 
-1. **Banco:** crie um projeto no Neon/Supabase e rode as migrations da sua máquina com a URL **direta**:
+Cada ambiente (staging e prod) é uma stack do CDK, com a Web Function, o endpoint, o CloudFront (front e `/api/*` no mesmo domínio), os buckets e as roles. A criação de um ambiente, os segredos no SSM (`/shift-swap-api/<ambiente>/`) e o primeiro deploy estão em [infra/cdk/README.md](infra/cdk/README.md). Depois disso, os deploys saem pelo GitHub Actions (veja "CI/CD" abaixo).
 
-   ```bash
-   DATABASE_URL='postgresql://...?sslmode=require' bun run migrate
-   ```
+Banco: Postgres no Neon (o de staging é um branch do banco de prod). A API usa a URL **pooled** (segredo `DATABASE_URL` no SSM) e as migrations usam a URL **direta** (secret `MIGRATIONS_DATABASE_URL` do GitHub Environment).
 
-2. **Segredos** (SecureString no Parameter Store, gratuito). Para a API use a URL **pooled** do Neon/Supabase:
-
-   ```bash
-   aws ssm put-parameter --type SecureString --name /shift-swap-api/DATABASE_URL --value 'postgresql://...pooler...?sslmode=require'
-   aws ssm put-parameter --type SecureString --name /shift-swap-api/BETTER_AUTH_SECRET --value "$(openssl rand -base64 32)"
-   ```
-
-3. **Primeiro deploy** (precisa de um AWS CLI recente, com `aws lambda-web help` disponível). O endpoint é público (`ApplicationManaged`): a autenticação é feita pelo Better Auth.
-
-   ```bash
-   bun run build
-   aws lambda-web deploy --name shift-swap-api --code deploy --create --auth-type ApplicationManaged
-   ```
-
-   As variáveis não secretas e a configuração da revisão (role, timeout, logs) ficam em [config/env/prod.json](config/env/prod.json) e são aplicadas pelo deploy (veja "Configuração" abaixo). Dê à role criada (`awscli-lambdaweb-shift-swap-api`) `ssm:GetParameters` em `arn:aws:ssm:<região>:<conta>:parameter/shift-swap-api/*`.
-
-4. **Próximos deploys:** automáticos pelo GitHub Actions a cada push na `main` (veja "CI/CD" abaixo). Manualmente: `AWS_PROFILE=mario bun run deploy`.
-
-5. **Teste:** `curl https://<domínio do endpoint>/health` e depois uma rota autenticada. Uma revisão que falha ao iniciar também fica `Active`.
-
-Para limitar custos: defina `scalingConfig.maxEnvironments` e `throttleConfig.rateLimit` no endpoint, retenção curta nos logs do CloudWatch e um alerta no AWS Budgets.
+Para limitar custos, a stack define `scalingConfig.maxEnvironments` e `throttleConfig.rateLimit` no endpoint e retenção curta nos logs do CloudWatch. Vale ter um alerta no AWS Budgets.
 
 ## Infra como código
 
-A infra dos ambientes novos (staging e, em seguida, a prod nova) é definida em AWS CDK: veja [infra/cdk/README.md](infra/cdk/README.md). Staging: `https://so-staging.mariochaves.click`.
+A infra de staging e prod é definida em AWS CDK: veja [infra/cdk/README.md](infra/cdk/README.md). Staging: `https://so-staging.mariochaves.click`; prod: `https://so.mariochaves.click`.
 
 ## CI/CD (GitHub Actions)
 
@@ -120,14 +98,7 @@ Os jobs declaram o GitHub Environment (`staging`/`production`), e cada role de d
 - **Secreta:** `DATABASE_URL` e `BETTER_AUTH_SECRET` no SSM Parameter Store, sob o `SSM_PREFIX` do ambiente, carregadas por [src/lambda.ts](src/lambda.ts).
 - **Validação:** [src/config.ts](src/config.ts) valida tudo ao subir e derruba a inicialização com a lista do que falta ou está inválido.
 
-O GitHub acessa a AWS por OIDC, sem chaves guardadas. A role `github-actions-shift-swap-backend` só pode ser assumida pela `main` deste repositório e só cria revisões desta função. Para criar ou atualizar as roles (backend e frontend):
-
-```bash
-aws cloudformation deploy --profile mario --region us-east-1 \
-  --stack-name shift-swap-github-actions \
-  --template-file infra/github-actions-roles.yaml \
-  --capabilities CAPABILITY_NAMED_IAM
-```
+O GitHub acessa a AWS por OIDC, sem chaves guardadas. As roles de deploy (`github-actions-shift-swap-backend-<ambiente>` e `-frontend-<ambiente>`) são criadas pela stack do CDK de cada ambiente e só podem ser assumidas por jobs do GitHub Environment correspondente.
 
 **Migrations no deploy:** o secret `MIGRATIONS_DATABASE_URL` (URL **direta** do Neon) faz o deploy rodar `bun run migrate` antes de publicar. Sem ele as migrations ficam manuais (`bun run migrate:prod`). Para criar:
 
@@ -209,13 +180,13 @@ Cada bloco indica o status esperado no título (ex.: `— 403`). Rode de cima pa
 
 As regras de negócio de troca de turnos vêm da lib `shift-swap` (entidades, use-cases e ports, sem I/O próprio). A API implementa os repositórios (`Pg*Repository` em [src/lib/shift-swap](src/lib/shift-swap)) e monta os use-cases já prontos para uso em [src/lib/shift-swap/index.ts](src/lib/shift-swap/index.ts).
 
-No signup, um hook do Better Auth (`databaseHooks.user.create.after` em [src/lib/auth.ts](src/lib/auth.ts)) chama `CriarSupervisorUseCase` ou `CriarFuncionarioUseCase` de acordo com o `role` escolhido, reaproveitando o mesmo `id` do usuário autenticado — então `FuncionarioEntity.id === user.id` (ou `SupervisorEntity.id === user.id`), sem tabela de vínculo extra. As tabelas `funcionario`/`supervisor` (schema em [src/db/schema.sql](src/db/schema.sql)) referenciam `user.id` com `ON DELETE CASCADE`.
+No signup, os hooks do Better Auth em [src/lib/auth.ts](src/lib/auth.ts) validam nome e e-mail com as regras do domínio (`before`, 400 se inválido) e criam o funcionário com `CriarFuncionarioUseCase` (`after`), reaproveitando o mesmo `id` do usuário autenticado — então `FuncionarioEntity.id === user.id`, sem tabela de vínculo extra. Supervisores vêm da promoção por script (`SupervisorEntity.id === user.id`). As tabelas `funcionario`/`supervisor` (schema em [src/db/schema.sql](src/db/schema.sql)) referenciam `user.id` com `ON DELETE CASCADE`.
 
 A tabela `turno` (schema em [src/db/schema.sql](src/db/schema.sql)) referencia `funcionario.id`. Os use-cases de solicitação de troca ainda não têm rotas na API.
 
 ## Integração com o frontend
 
-As origens do front ficam em [src/lib/origins.ts](src/lib/origins.ts) (`localhost:5173`, `dkrzib6ua831y.cloudfront.net` e `so.mariochaves.click`); outras podem ser acrescentadas em `CORS_ORIGIN` (lista separada por vírgula). O front deve usar `credentials: "include"` nas chamadas, já que a sessão é baseada em cookies. Como o campo `role` é uma extensão do schema padrão, o client do Better Auth no frontend precisa do plugin `inferAdditionalFields`:
+As origens do front ficam em [src/lib/origins.ts](src/lib/origins.ts): `localhost:5173` sempre, mais as de `CORS_ORIGIN` do ambiente (`config/env/<ambiente>.json`, lista separada por vírgula). O front deve usar `credentials: "include"` nas chamadas, já que a sessão é baseada em cookies. Como o campo `role` é uma extensão do schema padrão, o client do Better Auth no frontend precisa do plugin `inferAdditionalFields`:
 
 ```ts
 import { createAuthClient } from "better-auth/client";

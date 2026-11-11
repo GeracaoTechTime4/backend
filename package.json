@@ -19,8 +19,7 @@
     "supervisor:rebaixar:prod": "bun --env-file=.env.production.local run scripts/rebaixar-supervisor.ts",
     "supervisor:rebaixar:staging": "bun --env-file=.env.staging.local run scripts/rebaixar-supervisor.ts",
     "build": "bun build src/lambda.ts --target=node --format=esm --define 'process.env.NODE_ENV=\"production\"' --outfile=deploy/index.js --external @electric-sql/pglite --external pg-native && echo '{\"type\":\"module\"}' > deploy/package.json",
-    "start:node": "node deploy/index.js",
-    "deploy": "bun run build && aws lambda-web deploy --name shift-swap-api --code deploy --bucket-name shift-swap-api-web-666600766236 --region us-east-1"
+    "start:node": "node deploy/index.js"
   },
   "devDependencies": {
     "@better-auth/cli": "^1.4.21",
