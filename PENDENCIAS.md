@@ -24,21 +24,18 @@ Atualizado em 2026-11-11. Plano original: IaC em CDK, ambientes staging/prod, co
 
 **Dependências:** core-kernel 0.3.1 e shift-swap 0.7.1 em prod desde 2026-11-11 (PR #18), com o `core-kernel-check` como dev dependency.
 
-## 1. Falha de segurança: qualquer um se cadastra como supervisor (prioridade alta) — em andamento
+## 1. Falha de segurança: qualquer um se cadastra como supervisor — ✅ concluído em 2026-11-11
 
-`src/lib/auth.ts` declarava `role` com `input: true`: um `POST /api/auth/sign-up/email` com `"role": "SUPERVISOR"` criava um supervisor.
+`src/lib/auth.ts` declarava `role` com `input: true`: um `POST /api/auth/sign-up/email` com `"role": "SUPERVISOR"` criava um supervisor. Corrigido no backend (PR #19, em prod às 21:57 UTC) e no front (PR #17 do front, em prod às 22:15 UTC).
 
-**Feito (branch `fix/cadastro-sem-role` no backend e no front, sem PR ainda):**
-- Backend: `role` com `input: false` e `defaultValue: "EMPLOYEE"`, mais um hook `before` que força `EMPLOYEE`. Um `role` enviado no corpo é ignorado (sem erro), então o front atual continua funcionando e o backend pode ir antes.
-- Promoção a supervisor fora da API: `bun run supervisor:promover <email>` (prod: `supervisor:promover:prod`), também usada pelo seed. Recusa quem já tem turnos ou solicitações (apagar o funcionário levaria os turnos junto, por `ON DELETE CASCADE`).
-- Rebaixamento para desfazer promoção por engano: `bun run supervisor:rebaixar <email>` (prod: `supervisor:rebaixar:prod`). Recusa supervisor com decisões no histórico e o último supervisor.
-- Auditoria em prod (2026-11-11): 3 supervisores, todos legítimos.
-- Seed: a senha `password123` era recusada pelo `haveIBeenPwned`, então o seed estava quebrado. Trocada por `turno-local-seed-2026`.
+- Backend: `role` com `input: false` e `defaultValue: "EMPLOYEE"`, mais um hook `before` que força `EMPLOYEE`. Um `role` enviado no corpo é ignorado (sem erro).
 - Front: sem o seletor de papel no cadastro; `role` com `input: false` no client.
+- Promoção a supervisor fora da API: `bun run supervisor:promover <email>` (`:staging` e `:prod` para os ambientes da AWS, PR #20), também usada pelo seed. Recusa quem já tem turnos ou solicitações (apagar o funcionário levaria os turnos junto, por `ON DELETE CASCADE`).
+- Rebaixamento para desfazer promoção por engano: `bun run supervisor:rebaixar <email>` (idem). Recusa supervisor com decisões no histórico e o último supervisor.
+- Auditoria em prod: 3 supervisores, todos legítimos.
+- Seed: a senha `password123` era recusada pelo `haveIBeenPwned` e o seed estava quebrado. Trocada por `turno-local-seed-2026`.
 
-**Falta:**
-- Abrir os PRs e fazer o deploy (backend primeiro, depois o front).
-- Opcional: `emailAndPassword.disableSignUp: true` se o cadastro for só por convite.
+**Opcional:** `emailAndPassword.disableSignUp: true` se o cadastro passar a ser só por convite.
 
 ## 2. Remover a infra antiga (depois de alguns dias estável)
 
@@ -72,8 +69,9 @@ A prod antiga não serve mais tráfego (o alias foi movido em 2026-11-06). Ainda
 - **E-mails antigos com maiúsculas (opcional):** o shift-swap 0.7 normaliza na leitura, mas o banco só muda no próximo `update`. Para alinhar: `UPDATE funcionario SET email = lower(trim(email))` e o mesmo em `supervisor`.
 - **Limite de tentativas burlável:** chamadas direto ao domínio da Web Function (`*.lambda-web...on.aws`), sem passar pelo CloudFront, conseguem forjar `CloudFront-Viewer-Address`. Fechar com um header secreto enviado pelo CloudFront (origin custom header) e validado pela API.
 - **Itens 4 a 6 da revisão do Better Auth:** captcha (Turnstile), verificação de e-mail, recuperação de senha e 2FA para supervisores.
-- **Staging:** o branch do Neon é uma cópia dos dados de prod (decisão: manter). O usuário de teste `teste-pipeline-1793991513@example.com` existe só em staging.
+- **Staging:** o branch do Neon é uma cópia dos dados de prod (decisão: manter). Os usuários de teste `teste-pipeline-1793991513@example.com` e `teste-role-1794431199@example.com` existem só em staging.
 - **GitHub plano Free:** sem revisor obrigatório no Environment `production`. Assinar o plano Team permitiria trocar a promoção manual por aprovação.
+- **Orçamento do Actions:** o orçamento da organização é US$ 0 com bloqueio, e a cota gratuita acabou em 2026-11-11. Backend e front passaram a ser públicos (minutos ilimitados). Se algum repositório voltar a ser privado, os jobs ficam na fila sem rodar.
 
 ## Lições aprendidas (Lambda Web Functions, CDK e CloudFormation)
 
@@ -84,4 +82,5 @@ A prod antiga não serve mais tráfego (o alias foi movido em 2026-11-06). Ainda
 - **Import de `AWS::Route53::RecordSet`:** precisa de `Name`, `HostedZoneId`, `Type` e `SetIdentifier` (vazio para registros simples).
 - **Mover um alias do CloudFront sem queda:** a distribuição de destino precisa ter um certificado que cubra o alias (usamos um alias temporário). Depois, TXT `_<alias>` e `update-domain-association`.
 - **Rotas de auth atrás do CloudFront:** o front chama `/api/api/auth/*`. O CloudFront tira um `/api` e o app recebe `/api/auth/*`. Testar com um `/api` só dá 404 e parece defeito, mas não é.
+- **Execuções presas na fila:** as execuções criadas durante o bloqueio de cobrança ficaram em `queued` para sempre. Não dá para cancelar nem rodar de novo (o GitHub as trata como encerradas). A saída é disparar outra com `gh workflow run ci-cd.yml --ref <branch>`.
 - **Permissões:** o Claude Code bloqueia, nesta máquina, merges, deploys de infra de prod e mudanças em IAM e segredos de prod. Esses comandos são rodados pelo usuário com `!`.

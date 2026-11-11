@@ -151,8 +151,8 @@ Com o endpoint em `Disabled`, novas revisões não assumem o tráfego sozinhas; 
 
 - `GET /health` — health-check, retorna `{ status: "ok", timestamp }`.
 - `POST /api/auth/sign-up/email` — cria um usuário `EMPLOYEE`. Corpo: `email`, `password` e `name`. O papel é definido pelo servidor: um `role` enviado no corpo é ignorado.
-- Supervisores são promovidos fora da API, a partir de um usuário já cadastrado: `bun run supervisor:promover <email>` (em prod, `bun run supervisor:promover:prod <email>`, com `.env.production.local`). A promoção recusa quem já tem turnos ou solicitações e pode ser repetida sem efeito.
-- Para desfazer uma promoção feita por engano: `bun run supervisor:rebaixar <email>` (em prod, `supervisor:rebaixar:prod`). Recusa supervisor que já decidiu solicitações (o histórico aponta para ele) e o último supervisor.
+- Supervisores são promovidos fora da API, a partir de um usuário já cadastrado: `bun run supervisor:promover <email>`. Para os ambientes da AWS, use o sufixo do ambiente: `supervisor:promover:staging` (lê `.env.staging.local`) e `supervisor:promover:prod` (lê `.env.production.local`). Cada arquivo só precisa da `DATABASE_URL` do banco daquele ambiente, que está no SSM em `/shift-swap-api/<ambiente>/DATABASE_URL`. A promoção recusa quem já tem turnos ou solicitações e pode ser repetida sem efeito.
+- Para desfazer uma promoção feita por engano: `bun run supervisor:rebaixar <email>` (com os mesmos sufixos: `:staging`, `:prod`). Recusa supervisor que já decidiu solicitações (o histórico aponta para ele) e o último supervisor.
 - `POST /api/auth/sign-in/email` — login.
 - Demais rotas expostas pelo Better Auth ficam sob o prefixo `/api/auth/*` (ver [documentação](https://www.better-auth.com/docs)).
 - `GET /turnos` — rota privada, exige sessão autenticada e `role` `SUPERVISOR` (401 sem sessão, 403 se for `EMPLOYEE`). Lista todos os turnos via `ListarTurnosUseCase`.
