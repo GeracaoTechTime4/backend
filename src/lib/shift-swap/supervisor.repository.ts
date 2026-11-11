@@ -1,4 +1,5 @@
-import { EmailVO, NameVO, SupervisorEntity, SupervisorId, type SupervisorRepository } from "shift-swap";
+import { Email, Text } from "core-kernel/vo";
+import { SupervisorEntity, SupervisorId, type SupervisorRepository } from "shift-swap";
 import type { Db } from "../db";
 
 interface PessoaRow {
@@ -10,7 +11,7 @@ interface PessoaRow {
 // Ver comentário em funcionario.repository.ts.
 function toEntity(row: PessoaRow): SupervisorEntity {
   return SupervisorEntity.reconstituir(
-    { name: NameVO.create(row.name).unwrap(), email: EmailVO.create(row.email).unwrap() },
+    { name: Text.create(row.name).unwrap(), email: Email.create(row.email).unwrap() },
     SupervisorId.from(row.id).unwrap(),
   );
 }

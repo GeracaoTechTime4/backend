@@ -24,21 +24,18 @@ function referenciaAgora(agora = new Date()): string {
 // ambiente. Guarda a execução em andamento para que requisições concorrentes aguardem a mesma.
 let ultima: { referencia: string; execucao: Promise<void> } | undefined;
 
+// execute() não rejeita: falhas (inclusive do banco) chegam como Result.fail com a causa em error.cause.
 async function expirar(referencia: string): Promise<void> {
-  try {
-    const result = await expirarSolicitacoesTrocaTurno.execute({ referencia });
+  const result = await expirarSolicitacoesTrocaTurno.execute({ referencia });
 
-    if (result.isFail()) {
-      console.error("Falha ao expirar solicitações de troca:", result.error.message, result.error.cause ?? "");
-      return;
-    }
+  if (result.isFail()) {
+    console.error("Falha ao expirar solicitações de troca:", result.error.message, result.error.cause ?? "");
+    return;
+  }
 
-    const expiradas = result.value.length;
-    if (expiradas > 0) {
-      console.log(`${expiradas} solicitação(ões) de troca expirada(s)`);
-    }
-  } catch (error) {
-    console.error("Erro ao expirar solicitações de troca:", error);
+  const expiradas = result.value.length;
+  if (expiradas > 0) {
+    console.log(`${expiradas} solicitação(ões) de troca expirada(s)`);
   }
 }
 
