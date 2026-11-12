@@ -14,17 +14,25 @@ pesos=()
 for par in "$@"; do
   pesos+=("revisionId=${par%%=*},weight=${par##*=}")
 done
+# Pesos pedidos, no formato que o jq devolve abaixo, para comparar com os do endpoint.
+esperado=$(printf '%s\n' "$@" | LC_ALL=C sort | paste -sd' ' -)
 
 aws lambda-web update-web-function-endpoint --function-name "$FUNCTION_NAME" \
   --endpoint-name "$endpoint" --revision-weights "${pesos[@]}" > /dev/null
 
+# Logo depois do update, a API ainda pode mostrar o Successful da atualização anterior: só vale
+# quando os pesos do endpoint já forem os pedidos.
 for _ in $(seq 1 60); do
-  status=$(aws lambda-web get-web-function-endpoint --function-name "$FUNCTION_NAME" \
-    --endpoint-name "$endpoint" --query updateStatus --output text)
+  estado=$(aws lambda-web get-web-function-endpoint --function-name "$FUNCTION_NAME" \
+    --endpoint-name "$endpoint" --output json)
+  status=$(jq -r '.updateStatus // "None"' <<< "$estado")
+  atual=$(jq -r '[.revisionWeights[] | "\(.revisionId)=\(.weight)"] | sort | join(" ")' <<< "$estado")
   case "$status" in
     Successful)
-      echo "Endpoint $endpoint: $*"
-      exit 0
+      if [ "$atual" = "$esperado" ]; then
+        echo "Endpoint $endpoint: $atual"
+        exit 0
+      fi
       ;;
     Failed)
       aws lambda-web get-web-function-endpoint --function-name "$FUNCTION_NAME" \
