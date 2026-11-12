@@ -2,6 +2,7 @@ import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
+import { CODIGOS_ERRO } from "shift-swap";
 import { auth } from "./lib/auth";
 import { withClientIp } from "./lib/client-ip";
 import { config } from "./config";
@@ -85,6 +86,11 @@ app.post("/turnos", requireAuth, requireSupervisor, async (c) => {
   });
 
   if (result.isFail()) {
+    // 23503 = foreign_key_violation: a única FK de `turno` é `funcionario_id`, então o funcionário
+    // não existe. Sem isto a falha chegava como erro inesperado (500).
+    if (codigoPostgres(result.error) === "23503") {
+      return c.json({ error: "Funcionário não encontrado", code: CODIGOS_ERRO.FUNCIONARIO_NAO_ENCONTRADO }, 404);
+    }
     return respostaDeErro(c, result.error);
   }
 

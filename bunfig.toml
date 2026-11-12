@@ -1,0 +1,3 @@
+[test]
+# Ambiente de teste (banco, segredos, flags) antes de qualquer import do app.
+preload = ["./test/setup.ts"]

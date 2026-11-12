@@ -64,7 +64,17 @@ PR #28. A Web Function não publica latência nem separa métricas por revisão,
 - Os alarmes não têm ação. Um tópico SNS com e-mail avisaria fora do deploy.
 - ~~Actions com Node 20~~: atualizadas para Node 24 em 2026-11-12 (`checkout@v7`, `upload-artifact@v7`, `download-artifact@v8`, `setup-node@v7`, `configure-aws-credentials@v6`; a `setup-bun@v2` já usava Node 24), no backend e no front.
 
-## 4. Melhorias menores
+## 4. Testes de integração e E2E — 🚧 backend na branch `test/integracao`; E2E do front pendente
+
+Plano: integração no backend (`bun test`, API em processo) e E2E no front (Playwright contra a stack local no CI).
+
+- **Backend:** 107 testes em `test/` (auth, permissões, turnos, funcionários, solicitações, expiração, scripts de supervisor, segredo de origem), ~10 s com PGlite em memória; no CI, contra o Postgres do job, antes do build.
+- **Ajustes feitos para testar:** `AUTH_CHECK_PWNED` (desliga a consulta ao HaveIBeenPwned só nos testes; produção exige ligado), PGlite em memória (`pglite:memory://`), migrations como função (`src/db/migrate.ts`).
+- **Bug corrigido:** `POST /turnos` com `funcionarioId` inexistente devolvia 500; agora 404 `FUNCIONARIO_NAO_ENCONTRADO`.
+- **Decisão de produto em aberto:** criar ou editar um turno sobreposto a outro do mesmo funcionário é aceito; a sobreposição só é checada ao aceitar ou aprovar uma troca. O teste `turno sobreposto ... é aceito` (`test/turnos.test.ts`) registra o comportamento atual; se virar regra (409 `CONFLITO_DE_HORARIO`), muda junto.
+- **Falta:** E2E no front (Playwright: cadastro/login, rotas protegidas, gestão de turnos, troca aprovada, troca recusada/rejeitada), com job no CI do front que sobe a API da `main` do backend.
+
+## 5. Melhorias menores
 
 - **Validação no cadastro:** ✅ em prod desde 2026-11-11 (PR #21). Nome e e-mail passam pelas regras do domínio no hook `before`; falhas devolvem `400` com `code` e `issues`, e nenhum usuário é criado. Antes, no Postgres (não no PGlite), a falha devolvia `500` e deixava o usuário do Better Auth sem o registro de funcionário. Conferido em 2026-11-11: nenhum usuário órfão em staging nem em prod.
 - **`sslmode` da `DATABASE_URL`:** prod (SSM e `MIGRATIONS_DATABASE_URL`) já usava `verify-full`. Em 2026-11-11 staging passou a usar também: SSM, secret do Environment e `.env.staging.local`. Documentado no `infra/cdk/README.md`.
