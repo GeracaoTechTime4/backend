@@ -2,7 +2,8 @@
 // Store antes de importar a aplicação, porque db.ts e auth.ts leem process.env ao carregar.
 import { GetParametersCommand, SSMClient } from "@aws-sdk/client-ssm";
 
-const SEGREDOS = ["DATABASE_URL", "BETTER_AUTH_SECRET"] as const;
+// ORIGIN_SECRET é obrigatório no Lambda: sem ele a API aceitaria chamadas direto no endpoint.
+const SEGREDOS = ["DATABASE_URL", "BETTER_AUTH_SECRET", "ORIGIN_SECRET"] as const;
 
 async function carregarSegredos(prefixo: string): Promise<void> {
   const base = prefixo.endsWith("/") ? prefixo : `${prefixo}/`;
