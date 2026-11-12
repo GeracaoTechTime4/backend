@@ -38,7 +38,7 @@ jobs:
       DEPLOY_CONFIG: ${{ inputs.environment == 'production' && 'config/env/prod.json' || 'config/env/staging.json' }}
       TARGET: ${{ inputs.revision_id }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Ler a configuração do ambiente
         run: |
@@ -50,7 +50,7 @@ jobs:
             echo "LIVE_REVISION_PARAM=$(jq -r .liveRevisionParameter "$DEPLOY_CONFIG")"
           } >> "$GITHUB_ENV"
 
-      - uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
