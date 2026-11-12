@@ -47,6 +47,11 @@ const schema = z
     CORS_ORIGIN: listaDeOrigens,
     CROSS_SITE_COOKIES: booleano,
     AUTH_RATE_LIMIT: booleano,
+    // Consulta ao HaveIBeenPwned no cadastro (rede externa). Só os testes desligam; produção exige ligado.
+    AUTH_CHECK_PWNED: z
+      .enum(["true", "false"])
+      .default("true")
+      .transform((valor) => valor === "true"),
     APP_TZ: fusoHorario.default("America/Sao_Paulo"),
     PG_POOL_MAX: z.coerce.number().int().min(1).max(50).default(5),
     // Valor do header que o CloudFront envia para a API (src/lib/origin-verify.ts). Vazio = não verifica.
@@ -69,6 +74,9 @@ const schema = z
     if (!env.BETTER_AUTH_SECRET) {
       ctx.addIssue({ code: "custom", path: ["BETTER_AUTH_SECRET"], message: "obrigatório em produção" });
     }
+    if (!env.AUTH_CHECK_PWNED) {
+      ctx.addIssue({ code: "custom", path: ["AUTH_CHECK_PWNED"], message: "não pode ser desligado em produção" });
+    }
     if (!process.env.BETTER_AUTH_URL) {
       ctx.addIssue({ code: "custom", path: ["BETTER_AUTH_URL"], message: "obrigatório em produção" });
     }
@@ -84,6 +92,7 @@ const resultado = schema.safeParse({
   CORS_ORIGIN: process.env.CORS_ORIGIN,
   CROSS_SITE_COOKIES: process.env.CROSS_SITE_COOKIES || undefined,
   AUTH_RATE_LIMIT: process.env.AUTH_RATE_LIMIT || undefined,
+  AUTH_CHECK_PWNED: process.env.AUTH_CHECK_PWNED || undefined,
   APP_TZ: process.env.APP_TZ || undefined,
   PG_POOL_MAX: process.env.PG_POOL_MAX || undefined,
   ORIGIN_SECRET: process.env.ORIGIN_SECRET || undefined,

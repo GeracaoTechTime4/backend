@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "dev": "bun run --hot src/index.ts",
+    "test": "bun test",
     "start": "bun run src/index.ts",
     "auth:generate": "bunx @better-auth/cli generate",
     "migrate:auth": "bun run scripts/migrate-auth.ts",

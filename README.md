@@ -49,6 +49,22 @@ API de troca de plantões com autenticação via [Better Auth](https://www.bette
 
 A API sobe em `http://localhost:3000`.
 
+## Testes de integração
+
+```bash
+bun test                     # PGlite em memória, sem rede, ~10 s
+TEST_DATABASE_URL=postgresql://shift_swap:shift_swap@localhost:5432/shift_swap bun test   # contra o Postgres do docker compose
+```
+
+Os testes ([test/](test/)) chamam a API em processo, como o CloudFront chamaria, com Better Auth, middlewares e repositórios Postgres de verdade. As regras puras do domínio já são testadas na lib `shift-swap`; aqui ficam o que só existe na API: papéis (401/403), formato dos erros (`code`/`issues`), rotas e filtros, hooks do cadastro, rate limit, expiração por relógio e os scripts de supervisor.
+
+- [test/setup.ts](test/setup.ts) define o ambiente antes de o app carregar (ignora o `.env` local), roda as migrations e bloqueia qualquer `fetch` externo. O cadastro não consulta o HaveIBeenPwned (`AUTH_CHECK_PWNED=false`, proibido em produção).
+- O rate limit fica ligado, como em produção: cada cliente dos testes usa um IP próprio em `CloudFront-Viewer-Address` ([test/helpers.ts](test/helpers.ts)).
+- Cada teste começa com o banco vazio (`limparBanco()`) e cria o que precisa com os helpers (`cadastrarFuncionario`, `cadastrarSupervisor`, `criarTurno`, `solicitar`).
+- A expiração usa `setSystemTime` para avançar o relógio ([test/expiracao.test.ts](test/expiracao.test.ts)).
+
+O CI roda `bun test` contra o Postgres do job antes do build; teste vermelho barra o deploy em staging.
+
 ## Docker
 
 Para rodar tudo (API + Postgres) via Docker:

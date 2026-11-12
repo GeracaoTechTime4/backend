@@ -22,7 +22,10 @@ async function criarPglite() {
 
   const dataDir = url?.slice("pglite:".length) || "./.data/pglite";
 
-  mkdirSync(dirname(dataDir), { recursive: true });
+  // `memory://` é o PGlite em memória (testes): não há diretório para criar.
+  if (!dataDir.startsWith("memory://")) {
+    mkdirSync(dirname(dataDir), { recursive: true });
+  }
 
   // O `bun --hot` reavalia este módulo; guardar a instância evita abrir o mesmo diretório duas vezes.
   const global = globalThis as typeof globalThis & { __pglite?: InstanceType<typeof PGlite> };

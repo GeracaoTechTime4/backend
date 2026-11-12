@@ -57,6 +57,14 @@ jobs:
 
       - run: bun install --frozen-lockfile
       - run: bunx tsc --noEmit
+
+      # API em processo contra o Postgres do job (localmente, sem TEST_DATABASE_URL, usa PGlite em
+      # memória). Sem rede: o cadastro não consulta o HaveIBeenPwned (test/setup.ts).
+      - name: Testes de integração
+        run: bun test
+        env:
+          TEST_DATABASE_URL: ${{ env.DATABASE_URL }}
+
       - run: bun run build
 
       # Roda o bundle de produção no Node 24 (como no Lambda) contra um Postgres de verdade.

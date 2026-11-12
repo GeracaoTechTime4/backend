@@ -36,8 +36,9 @@ export const auth = betterAuth({
     minPasswordLength: 8,
     maxPasswordLength: 128,
   },
-  // Recusa no cadastro e na troca de senha as senhas que já apareceram em vazamentos.
-  plugins: [haveIBeenPwned()],
+  // Recusa no cadastro e na troca de senha as senhas que já apareceram em vazamentos. A consulta vai
+  // para a API pública do HaveIBeenPwned; os testes a desligam (AUTH_CHECK_PWNED=false), produção não.
+  plugins: [haveIBeenPwned({ enabled: config.AUTH_CHECK_PWNED })],
   user: {
     additionalFields: {
       // O papel é do servidor: o cadastro público sempre cria EMPLOYEE e um `role` enviado no corpo é
