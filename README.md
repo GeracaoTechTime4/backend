@@ -87,15 +87,30 @@ A infra de staging e prod é definida em AWS CDK: veja [infra/cdk/README.md](inf
 | Todo PR e push | [ci-cd.yml](.github/workflows/ci-cd.yml) | `tsc --noEmit`, `bun run build`, smoke test do bundle no Node 24 contra um Postgres de verdade, bundle recusando configuração inválida e validação de `config/env/*.json` |
 | Push na `main` | [ci-cd.yml](.github/workflows/ci-cd.yml) → [deploy.yml](.github/workflows/deploy.yml) | Deploy em **staging** (`https://so-staging.mariochaves.click`) |
 | Manual: Actions → **"Promover para produção"** | [promote.yml](.github/workflows/promote.yml) → [deploy.yml](.github/workflows/deploy.yml) | Deploy em **produção** do mesmo bundle de uma execução que já passou por staging (sem `run_id`, a mais recente). Só roda a partir da `main` |
+| Manual: Actions → **"Rollback"** | [rollback.yml](.github/workflows/rollback.yml) | Volta o tráfego de um ambiente para uma revisão anterior, sem rebuild. Sem `revision_id`, só lista as revisões recentes com o commit de cada uma |
 
-O deploy de cada ambiente ([deploy.yml](.github/workflows/deploy.yml)) roda as migrations com o secret `MIGRATIONS_DATABASE_URL` **do GitHub Environment** (URL direta do banco daquele ambiente), envia o bundle ao S3, cria a revisão com a configuração de `config/env/<ambiente>.json`, move o tráfego, faz o smoke test e, nos ambientes do CDK, volta para a revisão anterior se ele falhar e grava a revisão no ar em `liveRevisionParameter`.
+Commits que só mexem em `**.md`, `http/`, `openspec/`, `infra/` ou `.env.example` não rodam o pipeline.
+
+### Deploy com canary
+
+O deploy de cada ambiente ([deploy.yml](.github/workflows/deploy.yml)):
+
+1. Roda as migrations com o secret `MIGRATIONS_DATABASE_URL` **do GitHub Environment** (URL direta do banco daquele ambiente).
+2. Envia o bundle ao S3 e cria a revisão com a configuração de `config/env/<ambiente>.json`, mais `APP_VERSION` (commit + execução), que identifica a revisão nas métricas.
+3. **Endpoint de teste:** aponta o endpoint `teste` para a revisão nova e faz o smoke test nele. Uma revisão que não sobe para aqui, sem tráfego de usuários.
+4. **Canary:** `canary.weight`% do tráfego vai para a revisão nova por `canary.minutes` minutos (staging: 10% por 3 min; prod: 10% por 10 min). Durante esse tempo o job gera tráfego pelo CloudFront e acompanha os alarmes `<função>-5xx` e `<função>-latencia-p95`. No fim, as métricas da própria revisão precisam cumprir `canary.minRequests`, `canary.maxErrorRatePercent` e `canary.maxP95Ms`.
+5. Com tudo ok, 100% para a revisão nova, smoke test pelo domínio público e gravação da revisão em `liveRevisionParameter`.
+
+Se algo falhar a partir do passo 4, o job volta todo o tráfego para a revisão anterior e termina com erro. O resumo da execução mostra as métricas do canary.
+
+**Métricas:** a Web Function não publica latência nem separa métricas por revisão. A API publica `Requests`, `Errors5xx` e `Latency` no namespace `ShiftSwap/Api` (EMF, [src/lib/metricas.ts](src/lib/metricas.ts)), com as dimensões `Environment` e `Environment`+`Version`. Os 5xx que o próprio Lambda devolve (revisão que nem responde) só aparecem na métrica nativa `AWS/Lambda/Web`, que é a do alarme de 5xx.
 
 Os jobs declaram o GitHub Environment (`staging`/`production`), e cada role de deploy só pode ser assumida por jobs daquele Environment. Os dois Environments só aceitam a branch `main`.
 
 ### Configuração
 
 - **Não secreta:** `config/env/<ambiente>.json` (`serviceConfig.environmentVariables`). Mudar uma variável é um PR nesse arquivo; o deploy aplica. Não edite variáveis pelo console: o próximo deploy sobrescreve.
-- **Secreta:** `DATABASE_URL` e `BETTER_AUTH_SECRET` no SSM Parameter Store, sob o `SSM_PREFIX` do ambiente, carregadas por [src/lambda.ts](src/lambda.ts).
+- **Secreta:** `DATABASE_URL`, `BETTER_AUTH_SECRET` e `ORIGIN_SECRET` no SSM Parameter Store, sob o `SSM_PREFIX` do ambiente, carregadas por [src/lambda.ts](src/lambda.ts).
 - **Validação:** [src/config.ts](src/config.ts) valida tudo ao subir e derruba a inicialização com a lista do que falta ou está inválido.
 
 O GitHub acessa a AWS por OIDC, sem chaves guardadas. As roles de deploy (`github-actions-shift-swap-backend-<ambiente>` e `-frontend-<ambiente>`) são criadas pela stack do CDK de cada ambiente e só podem ser assumidas por jobs do GitHub Environment correspondente.
@@ -108,15 +123,7 @@ gh secret set MIGRATIONS_DATABASE_URL < <(sed -n 's/^DATABASE_URL=//p' .env.prod
 
 **Migrations compatíveis (expand/contract):** durante o deploy a revisão antiga e a nova rodam contra o mesmo banco, e as migrations rodam antes da revisão nova. Toda migration precisa funcionar com o código que está no ar: adicionar colunas/tabelas (opcionais ou com default) num deploy e só remover ou renomear o que ficou sem uso num deploy seguinte.
 
-**Rollback:** o log do passo "Criar revisão" mostra a revisão anterior. Para voltar o tráfego para ela:
-
-```bash
-aws lambda-web update-web-function-endpoint --profile mario --region us-east-1 \
-  --function-name shift-swap-api --endpoint-name default \
-  --auto-deployment-mode Disabled --revision-weights revisionId=<revisão anterior>,weight=100
-```
-
-Com o endpoint em `Disabled`, novas revisões não assumem o tráfego sozinhas; depois de corrigir, volte para `{"autoDeploymentMode":"LatestRevision"}`.
+**Rollback:** Actions → **"Rollback"** → ambiente e `revision_id`. Rode primeiro sem `revision_id` para ver as revisões recentes, cada uma com o commit. O workflow confere se a revisão está `Active`, move 100% do tráfego, grava `liveRevisionParameter` e faz o smoke test. O resumo mostra a revisão que estava no ar, para desfazer. O rollback não reverte migrations, por isso a regra do expand/contract acima.
 
 ## Endpoints
 

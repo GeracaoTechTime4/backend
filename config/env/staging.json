@@ -1,16 +1,29 @@
 {
   "functionName": "shift-swap-api-staging",
   "endpointName": "default",
+  "testEndpointName": "teste",
   "codeBucket": "shift-swap-api-code-staging-666600766236",
   "publicUrl": "https://so-staging.mariochaves.click",
   "deployRoleArn": "arn:aws:iam::666600766236:role/github-actions-shift-swap-backend-staging",
   "liveRevisionParameter": "/shift-swap-api/staging/live-revision",
+  "alarms": [
+    "shift-swap-api-staging-5xx",
+    "shift-swap-api-staging-latencia-p95"
+  ],
+  "canary": {
+    "weight": 10,
+    "minutes": 3,
+    "minRequests": 20,
+    "maxErrorRatePercent": 1,
+    "maxP95Ms": 2000
+  },
   "serviceConfig": {
     "executionRoleArn": "arn:aws:iam::666600766236:role/shift-swap-api-staging-web-role",
     "timeoutSeconds": 30,
     "maxConcurrencyPerEnvironment": 64,
     "environmentVariables": {
       "NODE_ENV": "production",
+      "APP_ENV": "staging",
       "SSM_PREFIX": "/shift-swap-api/staging/",
       "BETTER_AUTH_URL": "https://so-staging.mariochaves.click",
       "CORS_ORIGIN": "https://so-staging.mariochaves.click",

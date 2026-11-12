@@ -4,7 +4,8 @@ Uma stack por ambiente (`ShiftSwap-staging`, `ShiftSwap-prod`), definida em [lib
 
 | Recurso | Nome |
 |---|---|
-| Lambda Web Function + endpoint `default` | `shift-swap-api-<env>` |
+| Lambda Web Function + endpoints `default` e `teste` (smoke test da revisão nova antes do canary) | `shift-swap-api-<env>` |
+| Alarmes do canary: taxa de 5xx (nativa) e latência p95 (EMF, `ShiftSwap/Api`) | `shift-swap-api-<env>-5xx`, `shift-swap-api-<env>-latencia-p95` |
 | Role de execução (logs + `ssm:GetParameters` em `/shift-swap-api/<env>/*`) | `shift-swap-api-<env>-web-role` |
 | Bucket do código da API (versionado) | `shift-swap-api-code-<env>-<conta>` |
 | Bucket do front (privado, via OAC) | `shift-swap-frontend-<env>-<conta>` |
@@ -20,6 +21,10 @@ Uma stack por ambiente (`ShiftSwap-staging`, `ShiftSwap-prod`), definida em [lib
 O endpoint nasce apontando para uma **revisão de bootstrap** ([bootstrap-app/](bootstrap-app/), responde 503), porque a API não cria endpoint sem revisão. Depois de cada deploy o pipeline grava o ID da revisão no ar em `/shift-swap-api/<env>/live-revision`, e a stack lê esse parâmetro a cada `cdk deploy`. Assim mudar o endpoint pelo CDK não devolve o tráfego para o bootstrap (testado em staging).
 
 **Não altere** a revisão de bootstrap nem os pesos do endpoint no código: os pesos vêm do parâmetro.
+
+O endpoint `teste` nasce no bootstrap, e um `cdk deploy` o devolve para lá. Não tem importância: ele só recebe tráfego durante o deploy, quando o pipeline o aponta para a revisão nova.
+
+Os alarmes não têm ação (SNS): servem ao canary do `deploy.yml`. Para receber avisos, crie um tópico e adicione `alarmActions`.
 
 ## Comandos
 

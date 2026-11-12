@@ -5,6 +5,7 @@ import { secureHeaders } from "hono/secure-headers";
 import { auth } from "./lib/auth";
 import { withClientIp } from "./lib/client-ip";
 import { config } from "./config";
+import { metricasHttp } from "./lib/metricas";
 import { exigirOrigemCloudFront } from "./lib/origin-verify";
 import { allowedOrigins } from "./lib/origins";
 import { requireAuth, requireEmployee, requireSupervisor } from "./lib/session-middleware";
@@ -28,6 +29,9 @@ const [hostname = "0.0.0.0", porta] = (
 const port = Number(porta);
 
 const app = new Hono();
+
+// Antes de tudo, para medir também as respostas 403 e as de erro.
+app.use("*", metricasHttp(config.APP_ENV, config.APP_VERSION));
 
 app.use("*", exigirOrigemCloudFront(config.ORIGIN_SECRET));
 
