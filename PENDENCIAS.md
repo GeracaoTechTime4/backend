@@ -64,7 +64,7 @@ PR #28. A Web Function não publica latência nem separa métricas por revisão,
 - Os alarmes não têm ação. Um tópico SNS com e-mail avisaria fora do deploy.
 - ~~Actions com Node 20~~: atualizadas para Node 24 em 2026-11-12 (`checkout@v7`, `upload-artifact@v7`, `download-artifact@v8`, `setup-node@v7`, `configure-aws-credentials@v6`; a `setup-bun@v2` já usava Node 24), no backend e no front.
 
-## 4. Testes de integração e E2E — 🚧 backend na branch `test/integracao`; E2E do front pendente
+## 4. Testes de integração e E2E — 🚧 backend PR #31, front PR #20
 
 Plano: integração no backend (`bun test`, API em processo) e E2E no front (Playwright contra a stack local no CI).
 
@@ -72,7 +72,8 @@ Plano: integração no backend (`bun test`, API em processo) e E2E no front (Pla
 - **Ajustes feitos para testar:** `AUTH_CHECK_PWNED` (desliga a consulta ao HaveIBeenPwned só nos testes; produção exige ligado), PGlite em memória (`pglite:memory://`), migrations como função (`src/db/migrate.ts`).
 - **Bug corrigido:** `POST /turnos` com `funcionarioId` inexistente devolvia 500; agora 404 `FUNCIONARIO_NAO_ENCONTRADO`.
 - **Decisão de produto em aberto:** criar ou editar um turno sobreposto a outro do mesmo funcionário é aceito; a sobreposição só é checada ao aceitar ou aprovar uma troca. O teste `turno sobreposto ... é aceito` (`test/turnos.test.ts`) registra o comportamento atual; se virar regra (409 `CONFLITO_DE_HORARIO`), muda junto.
-- **Falta:** E2E no front (Playwright: cadastro/login, rotas protegidas, gestão de turnos, troca aprovada, troca recusada/rejeitada), com job no CI do front que sobe a API da `main` do backend.
+- **Front (PR #20 do front):** E2E com Playwright, 9 testes (~20 s): cadastro/login, rotas protegidas, gestão de turnos, troca aprovada, troca recusada/rejeitada. O job `e2e` do CI do front sobe a API da `main` do backend com PGlite descartável e o front buildado; o deploy em staging do front depende dele.
+- **Ordem de merge:** este PR antes do #20 do front (o E2E usa `AUTH_CHECK_PWNED`).
 
 ## 5. Melhorias menores
 
