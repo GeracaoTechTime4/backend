@@ -1,9 +1,24 @@
 name: CI/CD
 
+# Mudanças só em documentação, requisições de exemplo (http/), specs (openspec/) ou infra (o CDK é
+# aplicado à mão e não passa pelo typecheck daqui) não rodam o pipeline. Um push com qualquer outro
+# arquivo roda normalmente. Para forçar: Actions → CI/CD → Run workflow.
 on:
   pull_request:
+    paths-ignore:
+      - "**.md"
+      - "http/**"
+      - "openspec/**"
+      - "infra/**"
+      - ".env.example"
   push:
     branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "http/**"
+      - "openspec/**"
+      - "infra/**"
+      - ".env.example"
   workflow_dispatch:
 
 permissions:
