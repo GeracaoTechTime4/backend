@@ -1,6 +1,6 @@
 # Pendências (IaC, ambientes e segurança)
 
-Atualizado em 2026-11-12. Plano original: IaC em CDK, ambientes staging/prod, configuração versionada e deploy seguro.
+Atualizado em 2026-11-12 (fases 1 a 4 concluídas). Plano original: IaC em CDK, ambientes staging/prod, configuração versionada e deploy seguro.
 
 ## Onde paramos
 
@@ -9,7 +9,7 @@ Atualizado em 2026-11-12. Plano original: IaC em CDK, ambientes staging/prod, co
 | 1. Configuração versionada e validada, migrations no pipeline | ✅ PR #13 |
 | 2. Infra em CDK (staging e prod) | ✅ PRs #14 e #17; prod migrada sem queda |
 | 3. Staging automático e promoção manual para prod (backend e front) | ✅ backend PRs #15 e #16; front PRs #15 e #16 |
-| 4. Canary com rollback automático | 🚧 branch `feat/canary` |
+| 4. Canary com rollback automático | ✅ PR #28; em prod desde 2026-11-12 |
 
 **Estado atual:**
 
@@ -51,15 +51,18 @@ A prod antiga não recebia tráfego desde 2026-11-08. Removidos (PR #22 no repos
 
 Ficou na AWS só o que é das stacks `ShiftSwap-staging` e `ShiftSwap-prod`, além dos recursos `hono-starter-*` (outro projeto).
 
-## 3. Fase 4: canary com rollback automático — 🚧 branch `feat/canary`
+## 3. Fase 4: canary com rollback automático — ✅ concluído em 2026-11-12
 
-O plano original previa alarmes de 5xx e de latência p95 da Web Function. A documentação mostrou que a Web Function **não publica latência nem separa métricas por revisão**. Ficou assim:
+PR #28. A Web Function não publica latência nem separa métricas por revisão, então a API publica as próprias (EMF, `ShiftSwap/Api`, por `Environment` e `Environment`+`Version`). Fluxo e limites no README ("Deploy com canary").
 
-- **Métricas próprias (EMF):** a API publica `Requests`, `Errors5xx` e `Latency` em `ShiftSwap/Api`, por `Environment` e por `Environment`+`Version` (`APP_VERSION` = commit + execução, gravado pelo pipeline).
-- **CDK:** alarmes `<função>-5xx` (métrica nativa, que também conta os 5xx do próprio Lambda) e `<função>-latencia-p95` (EMF); endpoint `teste`; permissões do pipeline para ler os alarmes, as métricas e o `ORIGIN_SECRET`.
-- **`deploy.yml`:** smoke test no endpoint `teste` antes de qualquer tráfego, canary de 10% (3 min em staging, 10 em prod) com tráfego gerado pelo job e acompanhamento dos alarmes, verificação das métricas da revisão nova, 100% e só então o `live-revision`. Qualquer falha volta para a revisão anterior.
-- **Rollback manual:** `rollback.yml` (Actions → "Rollback").
-- **Falta:** aplicar o CDK em staging e prod, testar o rollback em staging (alarme forçado com `set-alarm-state` durante o canary) e calibrar `maxP95Ms` com a latência real.
+- **Primeiro canary em staging:** `rev-aaadg`, 34 requisições, 0 com 5xx, p95 de 18 ms.
+- **Teste de rollback em staging:** alarme de 5xx forçado durante o canary; o pipeline detectou em 28 s e voltou para a revisão anterior em 36 s; `live-revision` intacto.
+- **Prod:** `rev-kvdei` (commit `3a31e76`), 160 requisições, 0 com 5xx, p95 de 10 ms; 100% às 18:45 UTC.
+
+**Ajustes possíveis:**
+- `canary.maxP95Ms` está em 2000 ms, contra cerca de 10 ms medidos. Calibrar depois de alguns dias de dados (o alarme `latencia-p95` está em 1500 ms).
+- Os alarmes não têm ação. Um tópico SNS com e-mail avisaria fora do deploy.
+- Actions com Node 20 (`checkout@v4`, `download-artifact@v4`, `configure-aws-credentials@v4`) geram aviso de descontinuação: atualizar as versões.
 
 ## 4. Melhorias menores
 
@@ -84,4 +87,7 @@ O plano original previa alarmes de 5xx e de latência p95 da Web Function. A doc
 - **Execuções presas na fila:** as execuções criadas durante o bloqueio de cobrança ficaram em `queued` para sempre. Não dá para cancelar nem rodar de novo (o GitHub as trata como encerradas). A saída é disparar outra com `gh workflow run ci-cd.yml --ref <branch>`.
 - **`cdk deploy` com mudanças antigas:** o primeiro deploy depois do PR #25 também aplicou a limpeza de acentos (commit `964c1f8`) e recriou a revisão de bootstrap. Antes de rodar o `cdk deploy`, confira se o endpoint já está na revisão gravada em `live-revision`: assim a atualização do endpoint não muda o tráfego.
 - **Commits sem código não rodam o pipeline:** o `ci-cd.yml` ignora `**.md`, `http/`, `openspec/`, `infra/` e `.env.example` (no front, só `**.md`). A promoção pega a última execução que passou por staging, então pular essas execuções não muda o que vai para prod. Se um dia a `main` exigir o check do CI para merge, um PR só de docs fica travado esperando um check que nunca roda.
+- **Alarme forçado num teste:** um `set-alarm-state ALARM` pode ficar preso sem tráfego, porque o CloudWatch só reavalia com dados novos. Depois do teste, volte o alarme para `OK`; senão o próximo deploy para na checagem antes do canary.
+- **`updateStatus` do endpoint:** logo depois de um `update-web-function-endpoint`, a API ainda pode mostrar o `Successful` da atualização anterior, e um endpoint recém-criado nem tem o campo. O `.github/scripts/pesos.sh` só aceita quando os pesos devolvidos são os pedidos.
+- **`cdk deploy` com mudanças de IAM via `!`:** sem terminal interativo o CDK não consegue pedir confirmação e para sem mudar nada. Confira o diff de IAM e rode com `--require-approval never`.
 - **Permissões:** o Claude Code bloqueia, nesta máquina, merges, deploys de infra de prod e mudanças em IAM e segredos de prod. Esses comandos são rodados pelo usuário com `!`.
