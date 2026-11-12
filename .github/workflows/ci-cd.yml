@@ -49,9 +49,9 @@ jobs:
       BETTER_AUTH_SECRET: ci-only-secret-not-used-anywhere-else-0123456789
       BETTER_AUTH_URL: http://localhost:3000
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
 
@@ -98,7 +98,7 @@ jobs:
         if: failure()
         run: cat server.log || true
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: lambda-bundle
           path: deploy/

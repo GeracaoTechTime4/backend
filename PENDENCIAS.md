@@ -62,7 +62,7 @@ PR #28. A Web Function não publica latência nem separa métricas por revisão,
 **Ajustes possíveis:**
 - `canary.maxP95Ms` está em 2000 ms, contra cerca de 10 ms medidos. Calibrar depois de alguns dias de dados (o alarme `latencia-p95` está em 1500 ms).
 - Os alarmes não têm ação. Um tópico SNS com e-mail avisaria fora do deploy.
-- Actions com Node 20 (`checkout@v4`, `download-artifact@v4`, `configure-aws-credentials@v4`) geram aviso de descontinuação: atualizar as versões.
+- ~~Actions com Node 20~~: atualizadas para Node 24 em 2026-11-12 (`checkout@v7`, `upload-artifact@v7`, `download-artifact@v8`, `setup-node@v7`, `configure-aws-credentials@v6`; a `setup-bun@v2` já usava Node 24), no backend e no front.
 
 ## 4. Melhorias menores
 
