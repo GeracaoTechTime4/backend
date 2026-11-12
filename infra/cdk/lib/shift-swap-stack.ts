@@ -84,7 +84,7 @@ export class ShiftSwapStack extends cdk.Stack {
     for (const group of logGroups) {
       group.grantWrite(executionRole);
     }
-    // Só os segredos deste ambiente (DATABASE_URL e BETTER_AUTH_SECRET, carregados por src/lambda.ts).
+    // Só os segredos deste ambiente (DATABASE_URL, BETTER_AUTH_SECRET e ORIGIN_SECRET, carregados por src/lambda.ts).
     executionRole.addToPolicy(
       new iam.PolicyStatement({
         actions: ["ssm:GetParameters"],
@@ -144,6 +144,14 @@ export class ShiftSwapStack extends cdk.Stack {
     // Com o valor "bootstrap" (ambiente novo) o endpoint aponta para a revisão de bootstrap.
     // O parâmetro precisa existir antes do primeiro deploy da stack (ver infra/cdk/README.md).
     const liveRevisionParam = `${ssmPrefix}live-revision`;
+    // Header secreto que o CloudFront envia para a API; a API carrega o mesmo parametro (src/lambda.ts).
+    // Parametro do tipo SSM (e nao {{resolve:ssm:...}}): o CloudFormation rele o valor a cada deploy,
+    // entao uma rotacao e `put-parameter` + `cdk deploy`. Precisa existir antes do deploy da stack.
+    const originSecret = new cdk.CfnParameter(this, "OriginSecret", {
+      type: "AWS::SSM::Parameter::Value<String>",
+      default: `${ssmPrefix}ORIGIN_SECRET`,
+      description: "Parametro do SSM com o header secreto entre o CloudFront e a API",
+    });
     const liveRevision = new cdk.CfnParameter(this, "LiveRevision", {
       type: "AWS::SSM::Parameter::Value<String>",
       default: liveRevisionParam,
@@ -217,6 +225,10 @@ export class ShiftSwapStack extends cdk.Stack {
         "/api/*": {
           origin: new origins.HttpOrigin(endpoint.attrDomainName, {
             protocolPolicy: cloudfront.OriginProtocolPolicy.HTTPS_ONLY,
+            // A API recusa requisicoes sem este header (src/lib/origin-verify.ts), o que fecha o
+            // acesso direto ao endpoint. O valor fica no SSM como String: parametros do tipo SSM nao
+            // aceitam SecureString. Ver "Segredo de origem" em infra/cdk/README.md.
+            customHeaders: { "x-origin-verify": originSecret.valueAsString },
           }),
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.HTTPS_ONLY,
           allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,

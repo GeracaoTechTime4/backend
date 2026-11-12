@@ -1,6 +1,6 @@
 # Pendências (IaC, ambientes e segurança)
 
-Atualizado em 2026-11-11. Plano original: IaC em CDK, ambientes staging/prod, configuração versionada e deploy seguro.
+Atualizado em 2026-11-12. Plano original: IaC em CDK, ambientes staging/prod, configuração versionada e deploy seguro.
 
 ## Onde paramos
 
@@ -62,10 +62,10 @@ Ficou na AWS só o que é das stacks `ShiftSwap-staging` e `ShiftSwap-prod`, al�
 
 ## 4. Melhorias menores
 
-- **Validação no cadastro:** corrigida na branch `fix/validacao-cadastro`. Nome e e-mail passam pelas regras do domínio no hook `before`; falhas devolvem `400` com `code` e `issues`, e nenhum usuário é criado. Antes, no Postgres (não no PGlite), a falha devolvia `500` e deixava o usuário do Better Auth sem o registro de funcionário. Conferido em 2026-11-11: nenhum usuário órfão em staging nem em prod.
+- **Validação no cadastro:** ✅ em prod desde 2026-11-11 (PR #21). Nome e e-mail passam pelas regras do domínio no hook `before`; falhas devolvem `400` com `code` e `issues`, e nenhum usuário é criado. Antes, no Postgres (não no PGlite), a falha devolvia `500` e deixava o usuário do Better Auth sem o registro de funcionário. Conferido em 2026-11-11: nenhum usuário órfão em staging nem em prod.
 - **`sslmode` da `DATABASE_URL`:** prod (SSM e `MIGRATIONS_DATABASE_URL`) já usava `verify-full`. Em 2026-11-11 staging passou a usar também: SSM, secret do Environment e `.env.staging.local`. Documentado no `infra/cdk/README.md`.
 - **E-mails antigos com maiúsculas (opcional):** o shift-swap 0.7 normaliza na leitura, mas o banco só muda no próximo `update`. Para alinhar: `UPDATE funcionario SET email = lower(trim(email))` e o mesmo em `supervisor`.
-- **Limite de tentativas burlável:** chamadas direto ao domínio da Web Function (`*.lambda-web...on.aws`), sem passar pelo CloudFront, conseguem forjar `CloudFront-Viewer-Address`. Fechar com um header secreto enviado pelo CloudFront (origin custom header) e validado pela API.
+- **Limite de tentativas burlável:** corrigido na branch `fix/origin-secret-header`. O CloudFront envia o header `x-origin-verify` com o valor de `/shift-swap-api/<env>/ORIGIN_SECRET`, e a API recusa com `403` o que chega sem ele (exceto `/health`). Antes, chamadas direto ao domínio da Web Function (`*.lambda-web...on.aws`) conseguiam forjar `CloudFront-Viewer-Address`. Implantação: ver "Segredo de origem" no `infra/cdk/README.md`.
 - **Itens 4 a 6 da revisão do Better Auth:** captcha (Turnstile), verificação de e-mail, recuperação de senha e 2FA para supervisores.
 - **Staging:** o branch do Neon é uma cópia dos dados de prod (decisão: manter). Os usuários de teste `teste-pipeline-1793991513@example.com` e `teste-role-1794431199@example.com` existem só em staging.
 - **GitHub plano Free:** sem revisor obrigatório no Environment `production`. Assinar o plano Team permitiria trocar a promoção manual por aprovação.

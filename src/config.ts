@@ -49,6 +49,8 @@ const schema = z
     AUTH_RATE_LIMIT: booleano,
     APP_TZ: fusoHorario.default("America/Sao_Paulo"),
     PG_POOL_MAX: z.coerce.number().int().min(1).max(50).default(5),
+    // Valor do header que o CloudFront envia para a API (src/lib/origin-verify.ts). Vazio = não verifica.
+    ORIGIN_SECRET: z.string().min(32, "precisa ter pelo menos 32 caracteres").optional(),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV !== "production") return;
@@ -80,6 +82,7 @@ const resultado = schema.safeParse({
   AUTH_RATE_LIMIT: process.env.AUTH_RATE_LIMIT || undefined,
   APP_TZ: process.env.APP_TZ || undefined,
   PG_POOL_MAX: process.env.PG_POOL_MAX || undefined,
+  ORIGIN_SECRET: process.env.ORIGIN_SECRET || undefined,
 });
 
 if (!resultado.success) {

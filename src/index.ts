@@ -4,6 +4,8 @@ import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
 import { auth } from "./lib/auth";
 import { withClientIp } from "./lib/client-ip";
+import { config } from "./config";
+import { exigirOrigemCloudFront } from "./lib/origin-verify";
 import { allowedOrigins } from "./lib/origins";
 import { requireAuth, requireEmployee, requireSupervisor } from "./lib/session-middleware";
 import {
@@ -26,6 +28,8 @@ const [hostname = "0.0.0.0", porta] = (
 const port = Number(porta);
 
 const app = new Hono();
+
+app.use("*", exigirOrigemCloudFront(config.ORIGIN_SECRET));
 
 app.use("*", secureHeaders());
 
