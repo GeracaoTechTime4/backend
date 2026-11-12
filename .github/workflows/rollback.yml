@@ -1,0 +1,100 @@
+name: Rollback
+
+# Volta todo o tráfego de um ambiente para uma revisão anterior da Web Function, sem rebuild.
+# Rode em Actions → "Rollback" → Run workflow. Sem `revision_id`, só lista as revisões recentes
+# (com o commit de cada uma) no resumo da execução, para você escolher.
+#
+# Não reverte migrations: a revisão escolhida precisa funcionar com o schema atual do banco.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Ambiente
+        required: true
+        type: choice
+        options: [staging, production]
+      revision_id:
+        description: Revisão de destino (ex. rev-abc12). Vazio = só listar as revisões
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  rollback:
+    name: Rollback (${{ inputs.environment }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ${{ inputs.environment }}
+    # Mesmo grupo do deploy.yml: não roda no meio de um deploy do mesmo ambiente.
+    concurrency:
+      group: deploy-backend-${{ inputs.environment }}
+      cancel-in-progress: false
+    env:
+      AWS_REGION: us-east-1
+      DEPLOY_CONFIG: ${{ inputs.environment == 'production' && 'config/env/prod.json' || 'config/env/staging.json' }}
+      TARGET: ${{ inputs.revision_id }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ler a configuração do ambiente
+        run: |
+          {
+            echo "FUNCTION_NAME=$(jq -r .functionName "$DEPLOY_CONFIG")"
+            echo "ENDPOINT_NAME=$(jq -r .endpointName "$DEPLOY_CONFIG")"
+            echo "PUBLIC_URL=$(jq -r .publicUrl "$DEPLOY_CONFIG")"
+            echo "DEPLOY_ROLE_ARN=$(jq -r .deployRoleArn "$DEPLOY_CONFIG")"
+            echo "LIVE_REVISION_PARAM=$(jq -r .liveRevisionParameter "$DEPLOY_CONFIG")"
+          } >> "$GITHUB_ENV"
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Atualizar AWS CLI
+        run: |
+          curl -sSL https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o awscliv2.zip
+          unzip -q awscliv2.zip
+          sudo ./aws/install --update
+          aws lambda-web help > /dev/null
+
+      - name: Revisões recentes
+        run: |
+          CURRENT=$(aws lambda-web get-web-function-endpoint --function-name "$FUNCTION_NAME" \
+            --endpoint-name "$ENDPOINT_NAME" --query 'revisionWeights[0].revisionId' --output text)
+          {
+            echo "### Revisões de $FUNCTION_NAME (no ar: \`$CURRENT\`)"
+            echo "| Revisão | Commit | Criada em | Estado |"
+            echo "|---|---|---|---|"
+            aws lambda-web list-web-function-revisions --function-name "$FUNCTION_NAME" --output json \
+              | jq -r '.revisions[:15][] | "| `\(.revisionId)` | \(.description // "") | \(.createdAt) | \(.state) |"'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "current=$CURRENT" >> "$GITHUB_ENV"
+
+      - name: Voltar o tráfego
+        if: env.TARGET != ''
+        run: |
+          STATE=$(aws lambda-web get-web-function-revision --function-name "$FUNCTION_NAME" \
+            --revision-id "$TARGET" --query state --output text)
+          [ "$STATE" = "Active" ] || { echo "::error::A revisão $TARGET está $STATE (precisa estar Active)."; exit 1; }
+
+          echo "De $current para $TARGET"
+          .github/scripts/pesos.sh "$ENDPOINT_NAME" "$TARGET=100"
+          aws ssm put-parameter --name "$LIVE_REVISION_PARAM" --type String --value "$TARGET" --overwrite > /dev/null
+          echo "::notice::$FUNCTION_NAME em $TARGET. Para desfazer, rode de novo com $current."
+
+      - name: Smoke test
+        if: env.TARGET != ''
+        run: |
+          for i in $(seq 1 12); do
+            if curl -sf "$PUBLIC_URL/api/health"; then
+              test "$(curl -s -o /dev/null -w '%{http_code}' "$PUBLIC_URL/api/turnos")" = "401" && exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::A API não respondeu como esperado depois do rollback."
+          exit 1

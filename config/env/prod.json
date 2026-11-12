@@ -1,16 +1,29 @@
 {
   "functionName": "shift-swap-api-prod",
   "endpointName": "default",
+  "testEndpointName": "teste",
   "codeBucket": "shift-swap-api-code-prod-666600766236",
   "publicUrl": "https://so.mariochaves.click",
   "deployRoleArn": "arn:aws:iam::666600766236:role/github-actions-shift-swap-backend-prod",
   "liveRevisionParameter": "/shift-swap-api/prod/live-revision",
+  "alarms": [
+    "shift-swap-api-prod-5xx",
+    "shift-swap-api-prod-latencia-p95"
+  ],
+  "canary": {
+    "weight": 10,
+    "minutes": 10,
+    "minRequests": 50,
+    "maxErrorRatePercent": 1,
+    "maxP95Ms": 2000
+  },
   "serviceConfig": {
     "executionRoleArn": "arn:aws:iam::666600766236:role/shift-swap-api-prod-web-role",
     "timeoutSeconds": 30,
     "maxConcurrencyPerEnvironment": 64,
     "environmentVariables": {
       "NODE_ENV": "production",
+      "APP_ENV": "prod",
       "SSM_PREFIX": "/shift-swap-api/prod/",
       "BETTER_AUTH_URL": "https://so.mariochaves.click",
       "CORS_ORIGIN": "https://so.mariochaves.click",

@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url";
 import * as cdk from "aws-cdk-lib";
 import * as acm from "aws-cdk-lib/aws-certificatemanager";
 import * as cloudfront from "aws-cdk-lib/aws-cloudfront";
+import * as cloudwatch from "aws-cdk-lib/aws-cloudwatch";
 import * as origins from "aws-cdk-lib/aws-cloudfront-origins";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as lambda from "aws-cdk-lib/aws-lambda";
@@ -29,6 +30,8 @@ export interface ShiftSwapEnvironment {
   /** Limites do endpoint da Web Function. */
   maxEnvironments: number;
   rateLimit: number;
+  /** Limite do alarme de latência p95 da API, em ms (métrica EMF de src/lib/metricas.ts). */
+  latencyP95AlarmMs: number;
 }
 
 export interface ShiftSwapStackProps extends cdk.StackProps {
@@ -181,6 +184,66 @@ export class ShiftSwapStack extends cdk.Stack {
       throttleConfig: { rateLimit: env.rateLimit },
     });
 
+    // Endpoint de teste: o pipeline aponta a revisao nova para ele e roda o smoke test ANTES de a
+    // revisao receber trafego de verdade. Fora do deploy nao recebe nada. Os pesos sao do pipeline
+    // (um `cdk deploy` volta este endpoint para o bootstrap, sem efeito para os usuarios).
+    // Exige o header x-origin-verify como o endpoint principal (o pipeline le o segredo no SSM).
+    const testEndpointName = "teste";
+    const testEndpoint = new lambda.CfnWebFunctionEndpoint(this, "TestEndpoint", {
+      functionName: webFunction.attrFunctionArn,
+      endpointName: testEndpointName,
+      endpointType: "HomeRegion",
+      authType: "ApplicationManaged",
+      revisionWeights: [{ revisionId: bootstrapRevision.attrRevisionId, weight: 100 }],
+      scalingConfig: { maxEnvironments: 2 },
+      throttleConfig: { rateLimit: 100 },
+    });
+
+    // --- Alarmes (o canary do deploy.yml acompanha os dois) -----------------------------------
+
+    // Taxa de 5xx do endpoint principal, pela metrica nativa: ela conta tambem os 5xx que o Lambda
+    // devolve quando a revisao nem chega a responder (o EMF da aplicacao nao ve esses). Com menos de
+    // 10 requisicoes no minuto a taxa e tratada como 0, para um erro isolado nao disparar o alarme.
+    const nativeMetric = (metricName: string) =>
+      new cloudwatch.Metric({
+        namespace: "AWS/Lambda/Web",
+        metricName,
+        dimensionsMap: { FunctionName: functionName, EndpointName: "default" },
+        statistic: "Sum",
+        period: cdk.Duration.minutes(1),
+      });
+    const errorRateAlarm = new cloudwatch.Alarm(this, "ErrorRateAlarm", {
+      alarmName: `${functionName}-5xx`,
+      alarmDescription: `Taxa de 5xx da API (${env.name}) acima de 5% (minimo de 10 requisicoes no minuto)`,
+      metric: new cloudwatch.MathExpression({
+        expression: "IF(req >= 10, 100 * FILL(e5xx, 0) / req, 0)",
+        usingMetrics: { e5xx: nativeMetric("HTTPResponseStatusClass5XX"), req: nativeMetric("ExecutedRequests") },
+        period: cdk.Duration.minutes(1),
+        label: "Taxa de 5xx (%)",
+      }),
+      threshold: 5,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
+      evaluationPeriods: 1,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+
+    // Latencia p95 de todas as revisoes do ambiente (metrica EMF; a Web Function nao publica latencia).
+    const latencyAlarm = new cloudwatch.Alarm(this, "LatencyAlarm", {
+      alarmName: `${functionName}-latencia-p95`,
+      alarmDescription: `Latencia p95 da API (${env.name}) acima de ${env.latencyP95AlarmMs} ms em 2 de 3 minutos`,
+      metric: new cloudwatch.Metric({
+        namespace: "ShiftSwap/Api",
+        metricName: "Latency",
+        dimensionsMap: { Environment: env.name },
+        statistic: "p95",
+        period: cdk.Duration.minutes(1),
+      }),
+      threshold: env.latencyP95AlarmMs,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
+      evaluationPeriods: 3,
+      datapointsToAlarm: 2,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
 
     // --- Front ---------------------------------------------------------------------------------
 
@@ -299,6 +362,21 @@ export class ShiftSwapStack extends cdk.Stack {
         resources: [`arn:${this.partition}:ssm:${this.region}:${this.account}:parameter${liveRevisionParam}`],
       }),
     );
+    // Smoke test no endpoint de teste: precisa do mesmo header que o CloudFront envia.
+    backendDeployRole.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ["ssm:GetParameter"],
+        resources: [`arn:${this.partition}:ssm:${this.region}:${this.account}:parameter${ssmPrefix}ORIGIN_SECRET`],
+      }),
+    );
+    // Canary: estado dos alarmes e metricas da revisao nova (GetMetricData nao aceita restricao por recurso).
+    backendDeployRole.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ["cloudwatch:DescribeAlarms"],
+        resources: [errorRateAlarm.alarmArn, latencyAlarm.alarmArn],
+      }),
+    );
+    backendDeployRole.addToPolicy(new iam.PolicyStatement({ actions: ["cloudwatch:GetMetricData"], resources: ["*"] }));
     codeBucket.grantReadWrite(backendDeployRole);
     executionRole.grantPassRole(backendDeployRole);
 
@@ -316,6 +394,10 @@ export class ShiftSwapStack extends cdk.Stack {
     const outputs: Record<string, string> = {
       FunctionName: functionName,
       EndpointDomainName: endpoint.attrDomainName,
+      TestEndpointName: testEndpointName,
+      TestEndpointDomainName: testEndpoint.attrDomainName,
+      ErrorRateAlarmName: errorRateAlarm.alarmName,
+      LatencyAlarmName: latencyAlarm.alarmName,
       ExecutionRoleArn: executionRole.roleArn,
       SsmPrefix: ssmPrefix,
       LiveRevisionParameter: liveRevisionParam,

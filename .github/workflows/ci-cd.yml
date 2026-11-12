@@ -81,7 +81,11 @@ jobs:
       - name: Configuração dos ambientes
         run: |
           for f in config/env/*.json; do
-            jq -e '.functionName and .endpointName and .codeBucket and .publicUrl and .deployRoleArn
+            jq -e '.functionName and .endpointName and .testEndpointName and .codeBucket and .publicUrl and .deployRoleArn
+              and .liveRevisionParameter and (.alarms | length > 0)
+              and .canary.weight > 0 and .canary.weight < 100 and .canary.minutes > 0
+              and .canary.minRequests > 0 and .canary.maxErrorRatePercent >= 0 and .canary.maxP95Ms > 0
+              and .serviceConfig.environmentVariables.APP_ENV
               and .serviceConfig.executionRoleArn
               and .serviceConfig.environmentVariables.NODE_ENV == "production"
               and .serviceConfig.environmentVariables.SSM_PREFIX

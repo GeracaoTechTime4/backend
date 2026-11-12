@@ -9,7 +9,7 @@ Atualizado em 2026-11-12. Plano original: IaC em CDK, ambientes staging/prod, co
 | 1. Configuração versionada e validada, migrations no pipeline | ✅ PR #13 |
 | 2. Infra em CDK (staging e prod) | ✅ PRs #14 e #17; prod migrada sem queda |
 | 3. Staging automático e promoção manual para prod (backend e front) | ✅ backend PRs #15 e #16; front PRs #15 e #16 |
-| 4. Canary com rollback automático | ⏳ pendente |
+| 4. Canary com rollback automático | 🚧 branch `feat/canary` |
 
 **Estado atual:**
 
@@ -51,14 +51,15 @@ A prod antiga não recebia tráfego desde 2026-11-08. Removidos (PR #22 no repos
 
 Ficou na AWS só o que é das stacks `ShiftSwap-staging` e `ShiftSwap-prod`, além dos recursos `hono-starter-*` (outro projeto).
 
-## 3. Fase 4: canary com rollback automático
+## 3. Fase 4: canary com rollback automático — 🚧 branch `feat/canary`
 
-- **CDK:** alarmes do CloudWatch por ambiente (5xx e latência p95 da Web Function).
-- **`deploy.yml`:** 10% para a revisão nova por cerca de 10 minutos, acompanhando os alarmes. Se tudo ficar ok, 100%; se algum alarme disparar, volta para a anterior e o job falha.
-  - Pesos: `update-web-function-endpoint --revision-weights revisionId=<nova>,weight=10 revisionId=<atual>,weight=90`.
-  - Só gravar o `live-revision` depois dos 100%.
-- **Rollback manual:** `workflow_dispatch` recebendo o ID da revisão.
-- **Teste:** forçar uma revisão quebrada em staging e ver o rollback.
+O plano original previa alarmes de 5xx e de latência p95 da Web Function. A documentação mostrou que a Web Function **não publica latência nem separa métricas por revisão**. Ficou assim:
+
+- **Métricas próprias (EMF):** a API publica `Requests`, `Errors5xx` e `Latency` em `ShiftSwap/Api`, por `Environment` e por `Environment`+`Version` (`APP_VERSION` = commit + execução, gravado pelo pipeline).
+- **CDK:** alarmes `<função>-5xx` (métrica nativa, que também conta os 5xx do próprio Lambda) e `<função>-latencia-p95` (EMF); endpoint `teste`; permissões do pipeline para ler os alarmes, as métricas e o `ORIGIN_SECRET`.
+- **`deploy.yml`:** smoke test no endpoint `teste` antes de qualquer tráfego, canary de 10% (3 min em staging, 10 em prod) com tráfego gerado pelo job e acompanhamento dos alarmes, verificação das métricas da revisão nova, 100% e só então o `live-revision`. Qualquer falha volta para a revisão anterior.
+- **Rollback manual:** `rollback.yml` (Actions → "Rollback").
+- **Falta:** aplicar o CDK em staging e prod, testar o rollback em staging (alarme forçado com `set-alarm-state` durante o canary) e calibrar `maxP95Ms` com a latência real.
 
 ## 4. Melhorias menores
 

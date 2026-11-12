@@ -51,6 +51,10 @@ const schema = z
     PG_POOL_MAX: z.coerce.number().int().min(1).max(50).default(5),
     // Valor do header que o CloudFront envia para a API (src/lib/origin-verify.ts). Vazio = não verifica.
     ORIGIN_SECRET: z.string().min(32, "precisa ter pelo menos 32 caracteres").optional(),
+    // Dimensões das métricas EMF (src/lib/metricas.ts). APP_ENV vem de config/env/<ambiente>.json e
+    // APP_VERSION é gravado pelo pipeline em cada revisão. Sem os dois, nenhuma métrica é publicada.
+    APP_ENV: z.string().optional(),
+    APP_VERSION: z.string().optional(),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV !== "production") return;
@@ -83,6 +87,8 @@ const resultado = schema.safeParse({
   APP_TZ: process.env.APP_TZ || undefined,
   PG_POOL_MAX: process.env.PG_POOL_MAX || undefined,
   ORIGIN_SECRET: process.env.ORIGIN_SECRET || undefined,
+  APP_ENV: process.env.APP_ENV || undefined,
+  APP_VERSION: process.env.APP_VERSION || undefined,
 });
 
 if (!resultado.success) {

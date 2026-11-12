@@ -16,6 +16,7 @@ const environments: ShiftSwapEnvironment[] = [
     maxEnvironments: 2,
     // Valores aceitos: 0, 100, 200, ..., 1000, 2000, ..., 10000.
     rateLimit: 100,
+    latencyP95AlarmMs: 1500,
   },
   {
     name: "prod",
@@ -26,6 +27,7 @@ const environments: ShiftSwapEnvironment[] = [
     dnsRecords: [{ id: "Alias", name: "so.mariochaves.click" }],
     maxEnvironments: 2,
     rateLimit: 100,
+    latencyP95AlarmMs: 1500,
   },
 ];
 
